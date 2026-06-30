@@ -96,7 +96,14 @@ def update_scraped_content_excel(db: Session):
         # Create DataFrame and export to Excel
         df = pd.DataFrame(rows)
         output_path = os.path.join(settings.DATA_DIR, "scraped_content.xlsx")
-        
+        try:
+            if os.path.exists(output_path):
+                with open(output_path, "r+"):
+                    pass
+        except IOError:
+            output_path = os.path.join(settings.DATA_DIR, "scraped_content_fresh.xlsx")
+            print(f"[Excel Exporter] scraped_content.xlsx is locked. Falling back to: {output_path}")
+            
         # Write to excel using openpyxl engine
         df.to_excel(output_path, index=False)
         print(f"[Excel Exporter] Successfully wrote master sheet to: {output_path}")
