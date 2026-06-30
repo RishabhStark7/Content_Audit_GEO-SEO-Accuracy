@@ -3,7 +3,7 @@ import sys
 import time
 import json
 import datetime
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session  # type: ignore  # pyrefly: ignore
 from backend.app.models.database import SessionLocal
 from backend.app.models.models import Medicine, AuditRecord
 from backend.app.core.config import settings
@@ -370,7 +370,7 @@ def main():
         
     # Standard sync using requests to backend or direct DB insertion
     # For safety, let's parse local Excel and sync database directly
-    import pandas as pd
+    import pandas as pd  # type: ignore  # pyrefly: ignore
     try:
         if catalog_path.endswith('.xlsx'):
             try:

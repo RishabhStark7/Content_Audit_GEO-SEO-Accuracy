@@ -1,9 +1,9 @@
 import os
 import json
 import datetime
-import httpx
+import httpx  # type: ignore  # pyrefly: ignore
 from typing import List
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session  # type: ignore  # pyrefly: ignore
 from backend.app.models.models import AuditRecord, Issue
 from backend.app.core.config import settings
 

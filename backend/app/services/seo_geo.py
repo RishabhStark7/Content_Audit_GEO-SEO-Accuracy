@@ -1,7 +1,7 @@
 import re
 import json
 import os
-from bs4 import BeautifulSoup
+from bs4 import BeautifulSoup  # type: ignore  # pyrefly: ignore
 from typing import Dict, List, Any
 
 # Benchmark Dictionary of top 5 brands for key generic drug + route combinations in India
@@ -241,7 +241,7 @@ def analyze_seo_geo(html_content: str, structured_data: dict) -> dict:
         "missing_prompts": missing_prompts
     }
 
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session  # type: ignore  # pyrefly: ignore
 from backend.app.models.models import AuditRecord
 from pathlib import Path
 from backend.app.core.config import settings
@@ -295,7 +295,7 @@ def run_seo_geo_ai_audit(db: Session, audit_record: AuditRecord):
                 f"- 'suggestions' (list of strings)"
             )
             
-            import httpx
+            import httpx  # type: ignore  # pyrefly: ignore
             url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key={settings.GEMINI_API_KEY}"
             payload = {
                 "contents": [{"parts": [{"text": prompt}]}],

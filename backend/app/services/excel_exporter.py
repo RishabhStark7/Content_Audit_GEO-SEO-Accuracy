@@ -1,8 +1,8 @@
 import os
 import json
 import datetime
-import pandas as pd
-from sqlalchemy.orm import Session
+import pandas as pd  # type: ignore  # pyrefly: ignore
+from sqlalchemy.orm import Session  # type: ignore  # pyrefly: ignore
 from backend.app.models.models import Medicine, AuditRecord
 from backend.app.core.config import settings
 

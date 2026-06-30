@@ -1,7 +1,7 @@
 import os
 import json
 from pathlib import Path
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session  # type: ignore  # pyrefly: ignore
 from backend.app.models.models import AuditRecord, Issue
 from backend.app.services.readability import calculate_readability
 from backend.app.services.seo_geo import analyze_seo_geo
