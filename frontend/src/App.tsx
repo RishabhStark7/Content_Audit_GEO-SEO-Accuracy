@@ -224,30 +224,30 @@ function App() {
       
       {/* 1. Header Navigation */}
       <header style={{
-        height: '70px',
-        borderBottom: '1px solid rgba(255, 255, 255, 0.08)',
+        height: '60px',
+        borderBottom: '1px solid rgba(0, 0, 0, 0.07)',
         padding: '0 32px',
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'space-between',
-        backgroundColor: 'var(--bg-secondary)',
+        backgroundColor: 'rgba(255, 255, 255, 0.85)',
+        backdropFilter: 'blur(20px)',
         position: 'sticky',
         top: 0,
         zIndex: 100
       }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-          {/* Glowing dot */}
-          <div style={{ width: '10px', height: '10px', borderRadius: '50%', backgroundColor: 'var(--status-success)', boxShadow: '0 0 8px var(--status-success)' }} />
-          <h1 style={{ fontSize: '20px', letterSpacing: '-0.03em' }}>
-            Tata 1mg <span className="gradient-text">MCGP</span>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+          <div style={{ width: '8px', height: '8px', borderRadius: '50%', backgroundColor: 'var(--status-success)' }} />
+          <h1 style={{ fontSize: '18px', fontWeight: 600, letterSpacing: '-0.02em', color: 'var(--text-primary)' }}>
+            Tata 1mg <span style={{ color: 'var(--accent-blue)' }}>MCGP</span>
           </h1>
-          <span style={{ fontSize: '11px', color: 'var(--text-muted)', borderLeft: '1px solid rgba(255,255,255,0.1)', paddingLeft: '12px', marginLeft: '4px' }}>
-            Medical Content Governance Platform
+          <span style={{ fontSize: '11px', color: 'var(--text-secondary)', borderLeft: '1px solid rgba(0,0,0,0.08)', paddingLeft: '10px', marginLeft: '2px' }}>
+            Content Governance
           </span>
         </div>
 
         {/* Tab Selection */}
-        <nav style={{ display: 'flex', gap: '16px' }}>
+        <nav style={{ display: 'flex', gap: '8px' }}>
           {(["DASHBOARD", "MEDICINES", "WORKSPACE"] as const).map((tab) => (
             <button
               key={tab}
@@ -255,14 +255,14 @@ function App() {
               style={{
                 background: 'transparent',
                 border: 'none',
-                color: activeTab === tab ? 'var(--text-primary)' : 'var(--text-secondary)',
-                fontSize: '13px',
-                fontWeight: '600',
+                color: activeTab === tab ? '#ffffff' : 'var(--text-secondary)',
+                fontSize: '12px',
+                fontWeight: '500',
                 cursor: 'pointer',
-                padding: '8px 16px',
-                borderRadius: '6px',
-                backgroundColor: activeTab === tab ? 'var(--bg-tertiary)' : 'transparent',
-                transition: 'all 0.2s ease'
+                padding: '6px 12px',
+                borderRadius: '99px',
+                backgroundColor: activeTab === tab ? 'var(--accent-blue)' : 'transparent',
+                transition: 'all 0.2s cubic-bezier(0.25, 0.8, 0.25, 1)'
               }}
             >
               {tab.charAt(0) + tab.slice(1).toLowerCase()}
@@ -278,8 +278,8 @@ function App() {
         {progress && progress.pending > 0 && (
           <div style={{
             padding: '20px',
-            backgroundColor: 'rgba(0, 210, 255, 0.03)',
-            border: '1px solid rgba(0, 210, 255, 0.15)',
+            backgroundColor: 'rgba(0, 113, 227, 0.03)',
+            border: '1px solid rgba(0, 113, 227, 0.12)',
             borderRadius: '12px',
             marginBottom: '24px',
             display: 'flex',
@@ -295,8 +295,8 @@ function App() {
               </span>
             </div>
             
-            <div style={{ width: '100%', height: '8px', backgroundColor: 'var(--bg-tertiary)', borderRadius: '4px', overflow: 'hidden' }}>
-              <div style={{ width: `${progress.percent_complete}%`, height: '100%', background: 'linear-gradient(90deg, var(--accent-blue), var(--accent-purple))', transition: 'width 0.5s ease' }} />
+            <div style={{ width: '100%', height: '6px', backgroundColor: 'var(--bg-tertiary)', borderRadius: '3px', overflow: 'hidden' }}>
+              <div style={{ width: `${progress.percent_complete}%`, height: '100%', background: 'var(--accent-blue)', transition: 'width 0.5s ease' }} />
             </div>
             
             <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '11px', color: 'var(--text-secondary)', marginBottom: '4px' }}>
@@ -308,19 +308,18 @@ function App() {
             {progress.logs && progress.logs.length > 0 && (
               <div style={{
                 marginTop: '10px',
-                backgroundColor: '#07090f',
-                border: '1px solid rgba(0, 210, 255, 0.1)',
+                backgroundColor: '#1d1d1f',
+                border: '1px solid rgba(0, 0, 0, 0.08)',
                 borderRadius: '8px',
                 padding: '12px',
                 fontFamily: 'Fira Code, SFMono-Regular, Consolas, Monaco, monospace',
                 fontSize: '11px',
-                color: '#00d2ff',
+                color: '#f5f5f7',
                 maxHeight: '130px',
                 overflowY: 'auto',
                 display: 'flex',
                 flexDirection: 'column',
                 gap: '4px',
-                boxShadow: 'inset 0 0 10px rgba(0,0,0,0.85)',
                 scrollBehavior: 'smooth'
               }}>
                 {progress.logs.map((log: string, idx: number) => (
@@ -337,8 +336,8 @@ function App() {
         {errorMsg && (
           <div style={{
             padding: '12px 24px',
-            backgroundColor: 'rgba(0, 210, 255, 0.05)',
-            border: '1px solid rgba(0, 210, 255, 0.15)',
+            backgroundColor: 'rgba(0, 113, 227, 0.04)',
+            border: '1px solid rgba(0, 113, 227, 0.1)',
             color: 'var(--accent-blue)',
             borderRadius: '8px',
             fontSize: '12px',
@@ -353,7 +352,14 @@ function App() {
 
         {/* Display Views */}
         {activeTab === "DASHBOARD" && (
-          <DashboardView summary={summary} heatmap={heatmap} trends={trends} />
+          <DashboardView 
+            summary={summary} 
+            heatmap={heatmap} 
+            trends={trends} 
+            issues={issues}
+            medicines={medicines}
+            audits={audits}
+          />
         )}
         {activeTab === "MEDICINES" && (
           <MedicinesView 
@@ -378,11 +384,11 @@ function App() {
       {/* 3. Footer */}
       <footer style={{
         padding: '20px 32px',
-        borderTop: '1px solid rgba(255, 255, 255, 0.05)',
+        borderTop: '1px solid rgba(0, 0, 0, 0.07)',
         textAlign: 'center',
         fontSize: '11px',
         color: 'var(--text-muted)',
-        backgroundColor: '#05060a'
+        backgroundColor: '#f5f5f7'
       }}>
         Tata 1mg Medical Affairs Content Governance Platform &copy; 2026. All rights reserved. Headless Playwright Auditor.
       </footer>

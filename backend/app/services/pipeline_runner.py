@@ -99,7 +99,7 @@ def run_scraping_phase(db: Session, medicines: list, logger: PipelineLogger):
         
         # Setup Audit record if missing
         if not audit:
-            audit_id = datetime.datetime.utcnow().strftime("%Y%m%d-%H%M%S")
+            audit_id = f"{datetime.datetime.utcnow().strftime('%Y%m%d-%H%M%S')}-{med.id}"
             audit = AuditRecord(id=audit_id, medicine_id=med.id, status="Pending")
             db.add(audit)
             db.commit()
@@ -337,6 +337,11 @@ def main():
                         choices=["all", "scraping", "completeness", "consumability", "accuracy", "seo"],
                         help="Specify process phase to execute.")
     args = parser.parse_args()
+    
+    # Auto-create tables on blank databases
+    from backend.app.models.database import engine
+    from backend.app.models.models import Base
+    Base.metadata.create_all(bind=engine)
     
     db = SessionLocal()
     

@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 
 interface SummaryData {
   total_urls: number;
@@ -25,13 +25,53 @@ interface TrendPoint {
   health: number;
 }
 
+interface IssueData {
+  id: string;
+  audit_record_id: string;
+  attribute: string;
+  content_bucket: string;
+  issue_type: string; // "MIS", "INC", "CON", "LCQ"
+  severity: string; // "Critical", "High", "Medium", "Low"
+  suggested_content: string | null;
+  reviewer_status: string;
+}
+
+interface MedicineData {
+  id: number;
+  url: string;
+  name: string;
+  generic_name?: string;
+}
+
+interface AuditData {
+  id: string;
+  medicine_id: number;
+  status: string;
+}
+
 interface DashboardViewProps {
   summary: SummaryData;
   heatmap: Record<string, number>;
   trends: TrendPoint[];
+  issues: IssueData[];
+  medicines: MedicineData[];
+  audits: AuditData[];
 }
 
-export const DashboardView: React.FC<DashboardViewProps> = ({ summary, heatmap, trends }) => {
+export const DashboardView: React.FC<DashboardViewProps> = ({ 
+  summary, 
+  heatmap, 
+  trends,
+  issues,
+  medicines,
+  audits
+}) => {
+  // Modal State
+  const [selectedBucket, setSelectedBucket] = useState<string | null>(null);
+  const [searchQuery, setSearchQuery] = useState<string>('');
+  const [severityFilter, setSeverityFilter] = useState<string>('ALL');
+  const [typeFilter, setTypeFilter] = useState<string>('ALL');
+
   // Score circle rendering helper
   const renderScoreCircle = (score: number, title: string, subtitle: string, color: string) => {
     const radius = 50;
@@ -40,18 +80,18 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ summary, heatmap, 
     const offset = circumference - (score / 100) * circumference;
 
     return (
-      <div className="glass-panel" style={{ padding: '24px', display: 'flex', flexDirection: 'column', alignItems: 'center', flex: '1', minWidth: '240px' }}>
+      <div className="glass-panel" style={{ padding: '24px', display: 'flex', flexDirection: 'column', alignItems: 'center', flex: '1', minWidth: '240px', backgroundColor: 'var(--bg-secondary)', border: '1px solid #dadce0' }}>
         <div style={{ position: 'relative', width: '120px', height: '120px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
           <svg style={{ transform: 'rotate(-90deg)', width: '120px', height: '120px' }}>
-            <circle cx="60" cy="60" r={radius} fill="transparent" stroke="rgba(255, 255, 255, 0.05)" strokeWidth={strokeWidth} />
+            <circle cx="60" cy="60" r={radius} fill="transparent" stroke="rgba(0, 0, 0, 0.04)" strokeWidth={strokeWidth} />
             <circle cx="60" cy="60" r={radius} fill="transparent" stroke={color} strokeWidth={strokeWidth} strokeDasharray={circumference} strokeDashoffset={offset} strokeLinecap="round" style={{ transition: 'stroke-dashoffset 0.5s ease' }} />
           </svg>
           <div style={{ position: 'absolute', display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
-            <span style={{ fontSize: '24px', fontWeight: 'bold', fontFamily: 'var(--font-display)' }}>{score}%</span>
+            <span style={{ fontSize: '24px', fontWeight: 'bold', fontFamily: 'var(--font-display)', color: 'var(--text-primary)' }}>{score}%</span>
             <span style={{ fontSize: '11px', color: 'var(--text-secondary)' }}>{subtitle}</span>
           </div>
         </div>
-        <h3 style={{ marginTop: '16px', fontSize: '16px', fontWeight: '600' }}>{title}</h3>
+        <h3 style={{ marginTop: '16px', fontSize: '16px', fontWeight: '600', color: 'var(--text-primary)' }}>{title}</h3>
       </div>
     );
   };
@@ -104,7 +144,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ summary, heatmap, 
           const y = getY(gridVal);
           return (
             <g key={gridVal}>
-              <line x1={padding} y1={y} x2={width - padding} y2={y} stroke="rgba(255, 255, 255, 0.05)" strokeWidth="1" />
+              <line x1={padding} y1={y} x2={width - padding} y2={y} stroke="rgba(0, 0, 0, 0.05)" strokeWidth="1" />
               <text x={padding - 10} y={y + 4} fill="var(--text-muted)" fontSize="10" textAnchor="end">{gridVal}</text>
             </g>
           );
@@ -117,19 +157,76 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ summary, heatmap, 
         
         {/* Render points */}
         {trends.map((pt, idx) => (
-          <circle key={idx} cx={getX(idx)} cy={getY(pt.health)} r="4" fill="var(--status-success)" stroke="var(--bg-secondary)" strokeWidth="2" />
+          <circle key={idx} cx={getX(idx)} cy={getY(pt.health)} r="4" fill="var(--status-success)" stroke="#fff" strokeWidth="2" />
         ))}
       </svg>
     );
   };
 
-  // Get color for density cell
+  // Get color for density cell (light theme Google palette shades)
   const getDensityColor = (count: number) => {
-    if (count === 0) return 'rgba(0, 245, 212, 0.1)';
-    if (count < 3) return 'rgba(254, 228, 64, 0.2)';
-    if (count < 6) return 'rgba(255, 0, 127, 0.4)';
-    return 'rgba(255, 0, 127, 0.8)';
+    if (count === 0) return '#e6f4ea'; // Light green
+    if (count < 3) return '#fef7e0'; // Light yellow
+    if (count < 6) return '#fce8e6'; // Light red/pink
+    return '#f9d2ce'; // Deeper light red
   };
+
+  // Helper to map issue to medicine
+  const getMedicineForIssue = (auditRecordId: string) => {
+    const audit = audits.find(a => a.id === auditRecordId);
+    if (!audit) return { id: 0, name: "Unknown SKU", url: "" };
+    const med = medicines.find(m => m.id === audit.medicine_id);
+    return med || { id: audit.medicine_id, name: `SKU #${audit.medicine_id}`, url: "" };
+  };
+
+  // Filter issues for active category modal
+  const getFilteredIssues = () => {
+    if (!selectedBucket) return [];
+    
+    return issues.filter(iss => {
+      if (iss.content_bucket !== selectedBucket) return false;
+      
+      const med = getMedicineForIssue(iss.audit_record_id);
+      
+      // Name Search query filter
+      if (searchQuery && !med.name.toLowerCase().includes(searchQuery.toLowerCase())) {
+        return false;
+      }
+      
+      // Severity filter
+      if (severityFilter !== 'ALL' && iss.severity !== severityFilter) {
+        return false;
+      }
+      
+      // Domain Type filter
+      if (typeFilter !== 'ALL') {
+        const isCompleteness = iss.issue_type === 'MIS';
+        if (typeFilter === 'COMPLETENESS' && !isCompleteness) return false;
+        if (typeFilter === 'ACCURACY' && isCompleteness) return false;
+      }
+      
+      return true;
+    });
+  };
+
+  // Sort issues descending by severity weight (Critical -> High -> Medium -> Low)
+  const getSortedIssues = () => {
+    const list = getFilteredIssues();
+    const severityWeight: Record<string, number> = {
+      "Critical": 4,
+      "High": 3,
+      "Medium": 2,
+      "Low": 1
+    };
+    
+    return list.sort((a, b) => {
+      const wA = severityWeight[a.severity] || 0;
+      const wB = severityWeight[b.severity] || 0;
+      return wB - wA;
+    });
+  };
+
+  const activeIssues = getSortedIssues();
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
@@ -144,10 +241,10 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ summary, heatmap, 
       {/* 2. Operational KPIs Row */}
       <div style={{ display: 'flex', flexWrap: 'wrap', gap: '24px' }}>
         {/* Core numbers */}
-        <div className="glass-panel" style={{ padding: '24px', flex: '1', minWidth: '280px', display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '16px' }}>
+        <div className="glass-panel" style={{ padding: '24px', flex: '1', minWidth: '280px', display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '16px', backgroundColor: 'var(--bg-secondary)', border: '1px solid #dadce0' }}>
           <div>
             <div style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>Total Registered SKU</div>
-            <div style={{ fontSize: '32px', fontWeight: 'bold', marginTop: '4px' }}>{summary.total_urls}</div>
+            <div style={{ fontSize: '32px', fontWeight: 'bold', marginTop: '4px', color: 'var(--text-primary)' }}>{summary.total_urls}</div>
           </div>
           <div>
             <div style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>Completed Scrapes</div>
@@ -164,24 +261,24 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ summary, heatmap, 
         </div>
 
         {/* Severity list */}
-        <div className="glass-panel" style={{ padding: '24px', flex: '1', minWidth: '280px' }}>
-          <h3 style={{ fontSize: '16px', marginBottom: '16px', fontWeight: '600' }}>Compliance Issues by Severity</h3>
+        <div className="glass-panel" style={{ padding: '24px', flex: '1', minWidth: '280px', backgroundColor: 'var(--bg-secondary)', border: '1px solid #dadce0' }}>
+          <h3 style={{ fontSize: '16px', marginBottom: '16px', fontWeight: '600', color: 'var(--text-primary)' }}>Compliance Issues by Severity</h3>
           <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
               <span style={{ fontSize: '13px', color: 'var(--status-danger)', fontWeight: 'bold' }}>🔴 Critical Issues</span>
-              <span style={{ fontSize: '16px', fontWeight: 'bold' }}>{summary.critical_issues}</span>
+              <span style={{ fontSize: '16px', fontWeight: 'bold', color: 'var(--text-primary)' }}>{summary.critical_issues}</span>
             </div>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-              <span style={{ fontSize: '13px', color: '#ff7b00', fontWeight: 'bold' }}>🟠 High Issues</span>
-              <span style={{ fontSize: '16px', fontWeight: 'bold' }}>{summary.high_issues}</span>
+              <span style={{ fontSize: '13px', color: 'var(--status-warning)', fontWeight: 'bold' }}>🟠 High Issues</span>
+              <span style={{ fontSize: '16px', fontWeight: 'bold', color: 'var(--text-primary)' }}>{summary.high_issues}</span>
             </div>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-              <span style={{ fontSize: '13px', color: 'var(--status-warning)', fontWeight: 'bold' }}>🟡 Medium Issues</span>
-              <span style={{ fontSize: '16px', fontWeight: 'bold' }}>{summary.medium_issues}</span>
+              <span style={{ fontSize: '13px', color: '#b06000', fontWeight: 'bold' }}>🟡 Medium Issues</span>
+              <span style={{ fontSize: '16px', fontWeight: 'bold', color: 'var(--text-primary)' }}>{summary.medium_issues}</span>
             </div>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
               <span style={{ fontSize: '13px', color: 'var(--accent-blue)', fontWeight: 'bold' }}>🔵 Low Issues</span>
-              <span style={{ fontSize: '16px', fontWeight: 'bold' }}>{summary.low_issues}</span>
+              <span style={{ fontSize: '16px', fontWeight: 'bold', color: 'var(--text-primary)' }}>{summary.low_issues}</span>
             </div>
           </div>
         </div>
@@ -191,40 +288,60 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ summary, heatmap, 
       <div style={{ display: 'flex', flexWrap: 'wrap', gap: '24px' }}>
         
         {/* Historical Trends chart */}
-        <div className="glass-panel" style={{ padding: '24px', flex: '2', minWidth: '350px' }}>
+        <div className="glass-panel" style={{ padding: '24px', flex: '2', minWidth: '350px', backgroundColor: 'var(--bg-secondary)', border: '1px solid #dadce0' }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
-            <h3 style={{ fontSize: '16px', fontWeight: '600' }}>Governance Trend Analysis</h3>
+            <h3 style={{ fontSize: '16px', fontWeight: '600', color: 'var(--text-primary)' }}>Governance Trend Analysis</h3>
             <div style={{ display: 'flex', gap: '12px', fontSize: '11px' }}>
               <span style={{ color: 'var(--status-success)' }}>● Health</span>
               <span style={{ color: 'var(--accent-blue)' }}>● Accuracy</span>
-              <span style={{ color: 'var(--accent-purple)' }}>  ● Completeness</span>
+              <span style={{ color: 'var(--accent-purple)' }}>● Completeness</span>
             </div>
           </div>
           {renderTrendChart()}
         </div>
 
-        {/* Heatmap density grid */}
-        <div className="glass-panel" style={{ padding: '24px', flex: '1.2', minWidth: '280px' }}>
-          <h3 style={{ fontSize: '16px', fontWeight: '600', marginBottom: '20px' }}>Compliance Risk Heatmap</h3>
+        {/* Heatmap density grid (Interactive Click triggers Modal) */}
+        <div className="glass-panel" style={{ padding: '24px', flex: '1.2', minWidth: '280px', backgroundColor: 'var(--bg-secondary)', border: '1px solid #dadce0' }}>
+          <h3 style={{ fontSize: '16px', fontWeight: '600', marginBottom: '8px', color: 'var(--text-primary)' }}>Compliance Risk Heatmap</h3>
+          <p style={{ fontSize: '11px', color: 'var(--text-secondary)', marginBottom: '16px' }}>Click category cell to review active issues list</p>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '12px' }}>
             {['Safety', 'FAQs', 'Metadata', 'Core Medical Content', 'Drug Interactions'].map((bucket) => {
               const count = heatmap[bucket] || 0;
               return (
                 <div 
                   key={bucket} 
+                  onClick={() => {
+                    setSelectedBucket(bucket);
+                    setSearchQuery('');
+                    setSeverityFilter('ALL');
+                    setTypeFilter('ALL');
+                  }}
                   style={{
                     padding: '16px', 
                     borderRadius: '12px', 
                     backgroundColor: getDensityColor(count),
-                    border: '1px solid rgba(255,255,255,0.05)',
+                    border: '1px solid #dadce0',
                     display: 'flex',
                     flexDirection: 'column',
                     justifyContent: 'space-between',
-                    minHeight: '90px'
+                    minHeight: '90px',
+                    cursor: 'pointer',
+                    transform: 'scale(1)',
+                    transition: 'all 0.2s ease-in-out'
+                  }}
+                  onMouseEnter={(e) => {
+                    e.currentTarget.style.transform = 'scale(1.03)';
+                    e.currentTarget.style.boxShadow = '0 4px 10px rgba(0,0,0,0.08)';
+                  }}
+                  onMouseLeave={(e) => {
+                    e.currentTarget.style.transform = 'scale(1)';
+                    e.currentTarget.style.boxShadow = 'none';
                   }}
                 >
-                  <span style={{ fontSize: '12px', color: 'var(--text-secondary)', fontWeight: '500' }}>{bucket}</span>
-                  <span style={{ fontSize: '20px', fontWeight: 'bold', marginTop: '8px' }}>{count} {count === 1 ? 'Issue' : 'Issues'}</span>
+                  <span style={{ fontSize: '12px', color: '#1f1f1f', fontWeight: '600' }}>{bucket}</span>
+                  <span style={{ fontSize: '20px', fontWeight: 'bold', marginTop: '8px', color: count > 0 ? '#1f1f1f' : '#2e7d32' }}>
+                    {count} {count === 1 ? 'Issue' : 'Issues'}
+                  </span>
                 </div>
               );
             })}
@@ -232,6 +349,225 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ summary, heatmap, 
         </div>
 
       </div>
+
+      {/* 4. Interactive Compliance List Modal Overlay */}
+      {selectedBucket && (
+        <div style={{
+          position: 'fixed',
+          top: 0,
+          left: 0,
+          width: '100vw',
+          height: '100vh',
+          backgroundColor: 'rgba(32, 33, 36, 0.6)',
+          backdropFilter: 'blur(4px)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          zIndex: 1000,
+          animation: 'fadeIn 0.2s ease-out'
+        }}>
+          <div style={{
+            backgroundColor: '#ffffff',
+            borderRadius: '12px',
+            width: '90%',
+            maxWidth: '850px',
+            maxHeight: '85vh',
+            padding: '24px',
+            display: 'flex',
+            flexDirection: 'column',
+            boxShadow: '0 8px 24px rgba(0,0,0,0.18)',
+            border: '1px solid #dadce0'
+          }}>
+            {/* Modal Header */}
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid #dadce0', paddingBottom: '16px', marginBottom: '16px' }}>
+              <div>
+                <h2 style={{ fontSize: '20px', color: 'var(--accent-blue)', fontFamily: 'var(--font-display)' }}>
+                  🏥 Compliance Category: {selectedBucket}
+                </h2>
+                <span style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>
+                  Found {activeIssues.length} matching issues (Critical & High priority sorted first)
+                </span>
+              </div>
+              <button 
+                onClick={() => setSelectedBucket(null)}
+                style={{
+                  background: 'none',
+                  border: 'none',
+                  fontSize: '28px',
+                  color: 'var(--text-secondary)',
+                  cursor: 'pointer',
+                  padding: '4px'
+                }}
+              >
+                &times;
+              </button>
+            </div>
+
+            {/* Modal Filters Row */}
+            <div style={{ display: 'flex', gap: '12px', flexWrap: 'wrap', marginBottom: '16px', padding: '12px', backgroundColor: '#f1f3f4', borderRadius: '8px' }}>
+              {/* Search text */}
+              <input 
+                type="text" 
+                placeholder="🔍 Search SKU Name..." 
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                style={{
+                  flex: '1.5',
+                  minWidth: '180px',
+                  padding: '8px 12px',
+                  borderRadius: '6px',
+                  border: '1px solid #dadce0',
+                  fontSize: '13px',
+                  outline: 'none'
+                }}
+              />
+              
+              {/* Severity filter */}
+              <select
+                value={severityFilter}
+                onChange={(e) => setSeverityFilter(e.target.value)}
+                style={{
+                  flex: '1',
+                  minWidth: '120px',
+                  padding: '8px 12px',
+                  borderRadius: '6px',
+                  border: '1px solid #dadce0',
+                  fontSize: '13px',
+                  backgroundColor: '#fff',
+                  outline: 'none'
+                }}
+              >
+                <option value="ALL">🚨 All Severities</option>
+                <option value="Critical">🔴 Critical Only</option>
+                <option value="High">🟠 High Only</option>
+                <option value="Medium">🟡 Medium Only</option>
+                <option value="Low">🔵 Low Only</option>
+              </select>
+
+              {/* Domain Type filter */}
+              <select
+                value={typeFilter}
+                onChange={(e) => setTypeFilter(e.target.value)}
+                style={{
+                  flex: '1',
+                  minWidth: '120px',
+                  padding: '8px 12px',
+                  borderRadius: '6px',
+                  border: '1px solid #dadce0',
+                  fontSize: '13px',
+                  backgroundColor: '#fff',
+                  outline: 'none'
+                }}
+              >
+                <option value="ALL">📁 All Domains</option>
+                <option value="COMPLETENESS">📝 Completeness (MIS)</option>
+                <option value="ACCURACY">🔬 Accuracy & Quality</option>
+              </select>
+            </div>
+
+            {/* Modal Issues Table Grid */}
+            <div style={{ flex: 1, overflowY: 'auto', paddingRight: '4px' }}>
+              {activeIssues.length === 0 ? (
+                <div style={{ textAlign: 'center', padding: '40px', color: 'var(--text-muted)' }}>
+                  📭 No active compliance tickets found matching your filter criteria.
+                </div>
+              ) : (
+                <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '13px' }}>
+                  <thead>
+                    <tr style={{ borderBottom: '2px solid #dadce0', textAlign: 'left', color: 'var(--text-secondary)' }}>
+                      <th style={{ padding: '10px' }}>SKU Name</th>
+                      <th style={{ padding: '10px' }}>Attribute Checked</th>
+                      <th style={{ padding: '10px' }}>Severity</th>
+                      <th style={{ padding: '10px' }}>Compliance Domain</th>
+                      <th style={{ padding: '10px' }}>Suggested Correction</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {activeIssues.map((iss) => {
+                      const med = getMedicineForIssue(iss.audit_record_id);
+                      
+                      // Severity style helper
+                      let severityBg = '#e8f0fe';
+                      let severityColor = '#1a73e8';
+                      if (iss.severity === 'Critical') {
+                        severityBg = '#fce8e6';
+                        severityColor = '#c5221f';
+                      } else if (iss.severity === 'High') {
+                        severityBg = '#ffe0b2';
+                        severityColor = '#e65100';
+                      } else if (iss.severity === 'Medium') {
+                        severityBg = '#fef7e0';
+                        severityColor = '#b06000';
+                      }
+
+                      return (
+                        <tr key={iss.id} style={{ borderBottom: '1px solid #dadce0', hover: { backgroundColor: '#f8f9fa' } }}>
+                          {/* SKU Name */}
+                          <td style={{ padding: '12px 10px', fontWeight: 'bold' }}>
+                            {med.name}
+                          </td>
+                          {/* Checked Attribute */}
+                          <td style={{ padding: '12px 10px' }}>{iss.attribute}</td>
+                          {/* Severity badge */}
+                          <td style={{ padding: '12px 10px' }}>
+                            <span style={{
+                              backgroundColor: severityBg,
+                              color: severityColor,
+                              padding: '3px 8px',
+                              borderRadius: '4px',
+                              fontWeight: 'bold',
+                              fontSize: '11px',
+                              display: 'inline-block'
+                            }}>
+                              {iss.severity}
+                            </span>
+                          </td>
+                          {/* Domain type badge */}
+                          <td style={{ padding: '12px 10px' }}>
+                            <span style={{
+                              backgroundColor: iss.issue_type === 'MIS' ? '#f3e5f5' : '#e2f1f8',
+                              color: iss.issue_type === 'MIS' ? '#7b1fa2' : '#0288d1',
+                              padding: '2px 6px',
+                              borderRadius: '4px',
+                              fontSize: '11px',
+                              fontWeight: '600'
+                            }}>
+                              {iss.issue_type === 'MIS' ? 'Completeness' : 'Accuracy/Quality'}
+                            </span>
+                          </td>
+                          {/* Suggested content */}
+                          <td style={{ padding: '12px 10px', color: 'var(--text-secondary)', fontStyle: 'italic' }}>
+                            {iss.suggested_content || 'N/A'}
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              )}
+            </div>
+
+            {/* Modal Footer */}
+            <div style={{ display: 'flex', justifyContent: 'flex-end', borderTop: '1px solid #dadce0', paddingTop: '16px', marginTop: '16px' }}>
+              <button 
+                onClick={() => setSelectedBucket(null)}
+                style={{
+                  backgroundColor: 'var(--accent-blue)',
+                  color: '#ffffff',
+                  border: 'none',
+                  borderRadius: '6px',
+                  padding: '8px 16px',
+                  fontSize: '13px',
+                  fontWeight: '600',
+                  cursor: 'pointer'
+                }}
+              >
+                Close Modal
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
     </div>
   );

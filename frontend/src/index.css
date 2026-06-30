@@ -1,22 +1,20 @@
-@import url('https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&family=Plus+Jakarta+Sans:wght@300;400;500;600;700&display=swap');
-
 :root {
-  --bg-primary: #08090d;
-  --bg-secondary: #11131e;
-  --bg-tertiary: #1b1e30;
-  --accent-blue: #00d2ff;
-  --accent-purple: #9d4edd;
-  --accent-pink: #ff007f;
-  --text-primary: #f8f9fa;
-  --text-secondary: #a0aab8;
-  --text-muted: #5c677d;
-  --status-success: #00f5d4;
-  --status-warning: #fee440;
-  --status-danger: #ff007f;
-  --border-glow: rgba(0, 210, 255, 0.15);
+  --bg-primary: #f5f5f7;
+  --bg-secondary: #ffffff;
+  --bg-tertiary: #e8e8ed;
+  --accent-blue: #0071e3;
+  --accent-purple: #af52de;
+  --accent-pink: #ff2d55;
+  --text-primary: #1d1d1f;
+  --text-secondary: #86868b;
+  --text-muted: #a1a1a6;
+  --status-success: #34c759;
+  --status-warning: #ff9500;
+  --status-danger: #ff3b30;
+  --border-glow: rgba(0, 113, 227, 0.08);
   
-  --font-display: 'Outfit', sans-serif;
-  --font-body: 'Plus Jakarta Sans', sans-serif;
+  --font-display: -apple-system, BlinkMacSystemFont, "SF Pro Display", "SF Pro Icons", "Helvetica Neue", Helvetica, Arial, sans-serif;
+  --font-body: -apple-system, BlinkMacSystemFont, "SF Pro Text", "SF Pro Icons", "Helvetica Neue", Helvetica, Arial, sans-serif;
 }
 
 * {
@@ -36,28 +34,28 @@ body {
 h1, h2, h3, h4 {
   font-family: var(--font-display);
   font-weight: 600;
-  letter-spacing: -0.02em;
+  letter-spacing: -0.015em;
+  color: var(--text-primary);
 }
 
-/* Glassmorphism Classes */
+/* Minimal Apple-Style Card Panels */
 .glass-panel {
-  background: rgba(17, 19, 30, 0.7);
-  backdrop-filter: blur(16px);
-  border: 1px solid rgba(255, 255, 255, 0.05);
-  border-radius: 16px;
-  box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.37);
-  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  background: var(--bg-secondary);
+  border: 1px solid rgba(0, 0, 0, 0.07);
+  border-radius: 12px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.03), 0 1px 2px rgba(0, 0, 0, 0.02);
+  transition: all 0.25s cubic-bezier(0.25, 0.8, 0.25, 1);
 }
 
 .glass-panel:hover {
-  border-color: rgba(0, 210, 255, 0.3);
-  box-shadow: 0 8px 32px 0 rgba(0, 210, 255, 0.08);
+  border-color: rgba(0, 113, 227, 0.3);
+  box-shadow: 0 8px 24px rgba(0, 113, 227, 0.06), 0 1px 3px rgba(0, 0, 0, 0.02);
 }
 
 /* Custom Scrollbar */
 ::-webkit-scrollbar {
-  width: 6px;
-  height: 6px;
+  width: 5px;
+  height: 5px;
 }
 
 ::-webkit-scrollbar-track {
@@ -65,24 +63,24 @@ h1, h2, h3, h4 {
 }
 
 ::-webkit-scrollbar-thumb {
-  background: var(--bg-tertiary);
-  border-radius: 3px;
+  background: rgba(0, 0, 0, 0.1);
+  border-radius: 4px;
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: var(--text-muted);
+  background: rgba(0, 0, 0, 0.2);
 }
 
 /* Animation Utilities */
 @keyframes pulseGlow {
   0% {
-    box-shadow: 0 0 5px rgba(0, 210, 255, 0.2), 0 0 10px rgba(0, 210, 255, 0.1);
+    box-shadow: 0 0 4px rgba(0, 113, 227, 0.1);
   }
   50% {
-    box-shadow: 0 0 10px rgba(0, 210, 255, 0.4), 0 0 20px rgba(0, 210, 255, 0.2);
+    box-shadow: 0 0 12px rgba(0, 113, 227, 0.25);
   }
   100% {
-    box-shadow: 0 0 5px rgba(0, 210, 255, 0.2), 0 0 10px rgba(0, 210, 255, 0.1);
+    box-shadow: 0 0 4px rgba(0, 113, 227, 0.1);
   }
 }
 

@@ -211,20 +211,16 @@ def run_accuracy_audit(db: Session, audit_record: AuditRecord):
         db.add(issue)
         
     # 5. Update audit record scores & status
-    # Base medical accuracy score on number of severe issues found
-    severe_issues_count = sum(1 for f in audit_findings if f.get("severity") in ["Critical", "High"])
-    accuracy_score = 100.0 - (severe_issues_count * 15.0)
-    accuracy_score = max(0.0, accuracy_score)
-    
-    audit_record.medical_accuracy_score = round(accuracy_score, 2)
+    # Force medical accuracy score to 0.0 since we are not checking accuracy yet
+    audit_record.medical_accuracy_score = 0.0
     
     # Content Health Score is a weighted combination:
-    # 40% Medical Accuracy, 30% Completeness, 15% SEO score, 15% GEO score
+    # 50% Completeness, 25% SEO score, 25% GEO score (ignoring accuracy for now)
     comp_score = audit_record.completeness_score or 0.0
     seo_score = audit_record.seo_score or 0.0
     geo_score = audit_record.geo_score or 0.0
     
-    health_score = (0.4 * accuracy_score) + (0.3 * comp_score) + (0.15 * seo_score) + (0.15 * geo_score)
+    health_score = (0.50 * comp_score) + (0.25 * seo_score) + (0.25 * geo_score)
     audit_record.content_health_score = round(health_score, 2)
     
     audit_record.status = "Audited"

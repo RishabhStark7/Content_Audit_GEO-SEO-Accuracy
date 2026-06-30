@@ -337,6 +337,32 @@ def parse_html_to_json(html_content: str) -> Dict[str, Any]:
             formatted_safety[k] = f"Risk Level: {risk}"
             
     fact_box = extract_fact_box(soup)
+    faqs_data = extract_faqs(soup)
+    
+    # Dynamic FAQ fallbacks for Missed Dose, Overdose, and Dosage
+    missed_dose_text = extract_section_text(soup, ["Missed Dose"])
+    if not missed_dose_text:
+        for faq in faqs_data:
+            q = faq.get("question", "").lower()
+            if "forget to take" in q or "forget a dose" in q or "missed dose" in q or "miss a dose" in q:
+                missed_dose_text = faq.get("answer", "")
+                break
+                
+    overdose_text = extract_section_text(soup, ["Overdose"])
+    if not overdose_text:
+        for faq in faqs_data:
+            q = faq.get("question", "").lower()
+            if "take too much" in q or "overdose" in q or "accidental overdose" in q:
+                overdose_text = faq.get("answer", "")
+                break
+                
+    dosage_text = extract_section_text(soup, ["Dosage"])
+    if not dosage_text:
+        for faq in faqs_data:
+            q = faq.get("question", "").lower()
+            if "how to take" in q or "how much" in q or "how many" in q or "dose of" in q:
+                dosage_text = faq.get("answer", "")
+                break
     
     structured_data = {
         "medicine_name": product_name,
@@ -350,15 +376,15 @@ def parse_html_to_json(html_content: str) -> Dict[str, Any]:
         "side_effects": extract_side_effects(soup),
         "how_to_use": extract_section_text(soup, ["How to use", "How to Use", "Directions for Use"]),
         "how_it_works": extract_section_text(soup, ["works", "Mechanism of Action"]),
-        "dosage": extract_section_text(soup, ["Dosage"]),
-        "overdose": extract_section_text(soup, ["Overdose"]),
-        "missed_dose": extract_section_text(soup, ["Missed Dose"]),
+        "dosage": dosage_text,
+        "overdose": overdose_text,
+        "missed_dose": missed_dose_text,
         "substitutes": extract_substitutes(soup),
         "safety": formatted_safety,
         "quick_tips": extract_quick_tips(soup),
         "fact_box": fact_box,
         "drug_interactions": extract_drug_interactions(soup),
-        "faqs": extract_faqs(soup),
+        "faqs": faqs_data,
         "metadata": {
             "manufacturer": extract_manufacturer(soup),
             "breadcrumbs": extract_breadcrumbs(soup),

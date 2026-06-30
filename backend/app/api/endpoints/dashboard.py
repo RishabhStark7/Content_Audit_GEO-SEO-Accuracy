@@ -21,9 +21,10 @@ def get_dashboard_summary(db: Session = Depends(get_db)):
     urls_audited = len(audited_records)
     
     # Calculate average scores
-    avg_accuracy = db.query(func.avg(AuditRecord.medical_accuracy_score)).filter(AuditRecord.status == "Audited").scalar() or 0.0
+    # Calculate average scores
+    avg_accuracy = 0.0
     avg_completeness = db.query(func.avg(AuditRecord.completeness_score)).filter(AuditRecord.status.in_(["Completeness_Checked", "Audited"])).scalar() or 0.0
-    avg_health = db.query(func.avg(AuditRecord.content_health_score)).filter(AuditRecord.status == "Audited").scalar() or 0.0
+    avg_health = db.query(func.avg(AuditRecord.content_health_score)).filter(AuditRecord.status.in_(["Completeness_Checked", "Audited"])).scalar() or 0.0
     
     # Issues count
     total_issues = db.query(Issue).count()
@@ -32,6 +33,7 @@ def get_dashboard_summary(db: Session = Depends(get_db)):
     medium_issues = db.query(Issue).filter(Issue.severity == "Medium").count()
     low_issues = db.query(Issue).filter(Issue.severity == "Low").count()
     
+    # Filter issues that are not Closed
     open_issues = db.query(Issue).filter(Issue.reviewer_status != "Closed").count()
     closed_issues = db.query(Issue).filter(Issue.reviewer_status == "Closed").count()
     
@@ -46,7 +48,7 @@ def get_dashboard_summary(db: Session = Depends(get_db)):
         "total_urls": total_urls,
         "urls_scraped": urls_scraped,
         "urls_audited": urls_audited,
-        "overall_medical_accuracy_score": round(avg_accuracy, 2),
+        "overall_medical_accuracy_score": avg_accuracy,
         "overall_completeness_score": round(avg_completeness, 2),
         "overall_content_health_score": round(avg_health, 2),
         "total_issues": total_issues,
@@ -123,7 +125,7 @@ def get_trends_data(db: Session = Depends(get_db)):
         trends.append({
             "audit_id": r.id,
             "timestamp": r.scraped_at,
-            "accuracy": r.medical_accuracy_score or 0.0,
+            "accuracy": 0.0,
             "completeness": r.completeness_score or 0.0,
             "health": r.content_health_score or 0.0
         })
