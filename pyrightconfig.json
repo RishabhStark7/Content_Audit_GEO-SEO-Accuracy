@@ -1,0 +1,8 @@
+{
+  "venvPath": "E:/Content-Governance",
+  "venv": ".venv",
+  "reportGeneralTypeIssues": false,
+  "reportAttributeAccessIssue": false,
+  "reportArgumentType": false,
+  "reportCallIssue": false
+}

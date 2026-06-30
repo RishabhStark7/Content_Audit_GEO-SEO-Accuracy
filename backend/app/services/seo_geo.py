@@ -96,12 +96,14 @@ def evaluate_seo_score(html_content: str, structured_data: dict) -> int:
             
     # 4. Meta description presence (Max 20 pts)
     meta_desc = soup.find('meta', attrs={'name': re.compile(r'description', re.I)})
-    if meta_desc and meta_desc.get('content'):
-        desc_len = len(meta_desc.get('content'))
-        if desc_len > 100:
-            score += 20
-        else:
-            score += 10
+    if meta_desc:
+        content_val = meta_desc.get('content')
+        if content_val:
+            desc_len = len(str(content_val))
+            if desc_len > 100:
+                score += 20
+            else:
+                score += 10
             
     # 5. Content Volume / Word Count (Max 20 pts)
     # Estimate total words in main paragraphs

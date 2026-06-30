@@ -9,7 +9,7 @@ from backend.app.models.models import Medicine, AuditRecord
 from backend.app.core.config import settings
 
 # Configure UTF-8 stdout
-sys.stdout.reconfigure(encoding='utf-8')
+sys.stdout.reconfigure(encoding='utf-8')  # type: ignore
 
 # Global progress status manager
 PROGRESS_PATH = os.path.join(settings.DATA_DIR, "batch_progress.json")
@@ -387,7 +387,7 @@ def main():
         medicines = []
         for idx, row in df.iterrows():
             url = row[url_col]
-            if pd.isna(url):
+            if bool(pd.isna(url)):
                 continue
             url = str(url).strip()
             med = db.query(Medicine).filter(Medicine.url == url).first()
