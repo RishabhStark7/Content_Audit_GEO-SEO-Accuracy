@@ -123,36 +123,70 @@ def update_batch_progress(db: Session):
     """
     total_skus = db.query(Medicine).count()
     
-    # Completed medicines are those that have a latest audit in 'Audited' or 'Failed' status
+    # Load existing logs or active_process if they exist
+    progress_file = os.path.join(settings.DATA_DIR, "batch_progress.json")
+    active_process = "Scraping"
+    existing_logs = []
+    
+    if os.path.exists(progress_file):
+        try:
+            with open(progress_file, "r", encoding="utf-8") as f:
+                old_data = json.load(f)
+                active_process = old_data.get("active_process", active_process)
+                existing_logs = old_data.get("logs", existing_logs)
+        except:
+            pass
+
+    # Completed medicines are those that have a latest audit in appropriate statuses
     completed_count = 0
     medicines = db.query(Medicine).all()
     for med in medicines:
         latest_audit = db.query(AuditRecord).filter(
             AuditRecord.medicine_id == med.id
         ).order_by(AuditRecord.scraped_at.desc()).first()
-        if latest_audit and latest_audit.status in ["Completeness_Checked", "Audited", "Failed"]:
-            completed_count += 1
+        
+        # Count completion based on the active process
+        if active_process.lower() == "scraping":
+            if latest_audit and latest_audit.status in ["Scraped", "Completeness_Checked", "Audited", "Failed"]:
+                completed_count += 1
+        elif active_process.lower() == "completeness":
+            if latest_audit and latest_audit.status in ["Completeness_Checked", "Audited", "Failed"]:
+                completed_count += 1
+        elif active_process.lower() == "accuracy":
+            if latest_audit and latest_audit.status in ["Audited", "Failed"]:
+                completed_count += 1
+        else:
+            if latest_audit and latest_audit.status in ["Completeness_Checked", "Audited", "Failed"]:
+                completed_count += 1
             
     pending_count = total_skus - completed_count
     
-    # Estimate 20 seconds per pending SKU
-    time_remaining_sec = pending_count * 20
+    # Estimate time remaining based on active process
+    if "scraping" in active_process.lower():
+        rate = 15
+    elif "accuracy" in active_process.lower() or "seo" in active_process.lower():
+        rate = 4
+    else:
+        rate = 0.2
+        
+    time_remaining_sec = pending_count * rate
     time_remaining_str = f"{time_remaining_sec // 60}m {time_remaining_sec % 60}s" if time_remaining_sec > 0 else "0s"
     
     progress = {
+        "active_process": active_process,
         "total_skus": total_skus,
         "completed": completed_count,
         "pending": pending_count,
         "percent_complete": round((completed_count / total_skus * 100), 2) if total_skus > 0 else 100.0,
         "estimated_time_remaining_seconds": time_remaining_sec,
         "estimated_time_remaining": time_remaining_str,
-        "last_updated": datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        "last_updated": datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+        "logs": existing_logs
     }
     
-    progress_file = os.path.join(settings.DATA_DIR, "batch_progress.json")
     try:
         with open(progress_file, "w", encoding="utf-8") as f:
-            json.dump(progress, f, indent=2)
+            json.dump(progress, f, indent=2, ensure_ascii=False)
         print(f"[Progress Tracker] Updated progress: {completed_count}/{total_skus} done. Time remaining: {time_remaining_str}")
     except Exception as e:
         print(f"[Progress Tracker] Error writing progress JSON: {str(e)}")

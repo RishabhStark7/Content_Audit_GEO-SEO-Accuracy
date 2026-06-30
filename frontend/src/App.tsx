@@ -274,11 +274,11 @@ function App() {
       {/* 2. Main Dashboard Area */}
       <main style={{ flex: '1', padding: '32px', maxWidth: '1400px', width: '100%', margin: '0 auto' }}>
         
-        {/* Real-time Progress Bar */}
+        {/* Real-time Progress Bar & Console Log Viewer */}
         {progress && progress.pending > 0 && (
           <div style={{
-            padding: '16px',
-            backgroundColor: 'rgba(0, 210, 255, 0.04)',
+            padding: '20px',
+            backgroundColor: 'rgba(0, 210, 255, 0.03)',
             border: '1px solid rgba(0, 210, 255, 0.15)',
             borderRadius: '12px',
             marginBottom: '24px',
@@ -287,18 +287,49 @@ function App() {
             gap: '8px'
           }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '13px' }}>
-              <span style={{ fontWeight: '600' }}>🔄 Running Batch Content Audit...</span>
+              <span style={{ fontWeight: '600' }}>
+                🔄 Running Batch: <span style={{ color: 'var(--accent-blue)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>[{progress.active_process || 'Scraping'}]</span> Phase
+              </span>
               <span style={{ color: 'var(--accent-blue)', fontWeight: 'bold' }}>
                 {progress.completed} / {progress.total_skus} SKUs Done ({progress.percent_complete}%)
               </span>
             </div>
+            
             <div style={{ width: '100%', height: '8px', backgroundColor: 'var(--bg-tertiary)', borderRadius: '4px', overflow: 'hidden' }}>
               <div style={{ width: `${progress.percent_complete}%`, height: '100%', background: 'linear-gradient(90deg, var(--accent-blue), var(--accent-purple))', transition: 'width 0.5s ease' }} />
             </div>
-            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '11px', color: 'var(--text-secondary)' }}>
+            
+            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '11px', color: 'var(--text-secondary)', marginBottom: '4px' }}>
               <span>Estimated Time Remaining: <strong>{progress.estimated_time_remaining}</strong></span>
               <span>Last Sync: {progress.last_updated}</span>
             </div>
+
+            {/* Scrollable CLI Monospace Console Terminal Log Panel */}
+            {progress.logs && progress.logs.length > 0 && (
+              <div style={{
+                marginTop: '10px',
+                backgroundColor: '#07090f',
+                border: '1px solid rgba(0, 210, 255, 0.1)',
+                borderRadius: '8px',
+                padding: '12px',
+                fontFamily: 'Fira Code, SFMono-Regular, Consolas, Monaco, monospace',
+                fontSize: '11px',
+                color: '#00d2ff',
+                maxHeight: '130px',
+                overflowY: 'auto',
+                display: 'flex',
+                flexDirection: 'column',
+                gap: '4px',
+                boxShadow: 'inset 0 0 10px rgba(0,0,0,0.85)',
+                scrollBehavior: 'smooth'
+              }}>
+                {progress.logs.map((log: string, idx: number) => (
+                  <div key={idx} style={{ whiteSpace: 'pre-wrap', wordBreak: 'break-all', opacity: idx === progress.logs.length - 1 ? 1 : 0.75 }}>
+                    {log}
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
         )}
 

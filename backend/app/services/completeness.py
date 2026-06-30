@@ -7,14 +7,19 @@ from backend.app.services.readability import calculate_readability
 from backend.app.services.seo_geo import analyze_seo_geo
 from backend.app.core.config import settings
 
-EXPECTED_ATTRIBUTES = [
+MANDATORY_ATTRIBUTES = [
     "product_introduction", "uses", "benefits", "side_effects", 
     "how_to_use", "how_it_works", "alcohol", "pregnancy", 
     "breastfeeding", "driving", "kidney", "liver", "quick_tips", 
     "chemical_class", "therapeutic_class", "habit_forming", 
-    "action_class", "drug_interactions", "faqs",
+    "action_class", "drug_interactions", "faqs"
+]
+
+OPTIONAL_ATTRIBUTES = [
     "product_summary", "dosage", "overdose", "missed_dose", "substitutes"
 ]
+
+EXPECTED_ATTRIBUTES = MANDATORY_ATTRIBUTES + OPTIONAL_ATTRIBUTES
 
 def run_completeness_validation(db: Session, audit_record: AuditRecord):
     """
@@ -67,9 +72,9 @@ def run_completeness_validation(db: Session, audit_record: AuditRecord):
         val = fact_block.get(attr, "")
         presence_matrix[attr] = bool(val and len(str(val).strip()) > 0)
         
-    # Calculate completeness score
-    present_count = sum(1 for present in presence_matrix.values() if present)
-    completeness_score = (present_count / len(EXPECTED_ATTRIBUTES)) * 100.0
+    # Calculate completeness score based ONLY on mandatory attributes
+    present_mandatory_count = sum(1 for attr in MANDATORY_ATTRIBUTES if presence_matrix.get(attr, False))
+    completeness_score = (present_mandatory_count / len(MANDATORY_ATTRIBUTES)) * 100.0
     audit_record.completeness_score = round(completeness_score, 2)
     
     # Log missing attributes as issues under the simplified LCQ/MIS taxonomy
@@ -78,6 +83,10 @@ def run_completeness_validation(db: Session, audit_record: AuditRecord):
     db.query(Issue).filter(Issue.audit_record_id == audit_record.id).delete()
     
     for attr, present in presence_matrix.items():
+        # Do not flag missing optional elements as compliance issues
+        if attr in OPTIONAL_ATTRIBUTES:
+            continue
+            
         if not present:
             # Map attribute to its corresponding category bucket
             bucket = "Core Medical Content"

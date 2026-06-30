@@ -238,3 +238,89 @@ def analyze_seo_geo(html_content: str, structured_data: dict) -> dict:
         "missing_keywords": missing_keywords,
         "missing_prompts": missing_prompts
     }
+
+from sqlalchemy.orm import Session
+from backend.app.models.models import AuditRecord
+from pathlib import Path
+from backend.app.core.config import settings
+
+def run_seo_geo_ai_audit(db: Session, audit_record: AuditRecord):
+    """
+    Module 5: AI-based SEO & Prompts Audit.
+    Performs generative optimization analysis and prompt coverage checks,
+    updating the scores in the database.
+    """
+    print(f"[SEO & Prompts Audit] Triggered for audit: {audit_record.id}")
+    
+    # 1. Load HTML and JSON content
+    json_absolute_path = os.path.join(settings.DATA_DIR, audit_record.json_path)
+    html_absolute_path = os.path.join(settings.DATA_DIR, audit_record.html_path)
+    
+    if not os.path.exists(json_absolute_path) or not os.path.exists(html_absolute_path):
+        print(f"[SEO & Prompts Audit] Error: Files not found for audit {audit_record.id}")
+        return
+        
+    with open(json_absolute_path, "r", encoding="utf-8") as f:
+        data = json.load(f)
+        
+    with open(html_absolute_path, "r", encoding="utf-8") as f:
+        html_content = f.read()
+        
+    # 2. Token Governance: Truncate content to avoid token overflow
+    raw_text = flatten_text(data)
+    max_char_limit = 8000
+    if len(raw_text) > max_char_limit:
+        print(f"[Token Governance] WARNING: Input text is {len(raw_text)} chars. Truncating to {max_char_limit} chars to conserve tokens.")
+        raw_text = raw_text[:max_char_limit]
+        
+    # 3. Call AI or run local heuristic fallback
+    if not settings.GEMINI_API_KEY and not settings.VERTEX_PROJECT:
+        print("[SEO & Prompts Audit] No Gemini key set. Falling back to local rules analysis.")
+        results = analyze_seo_geo(html_content, data)
+    else:
+        try:
+            print("[SEO & Prompts Audit] Calling Gemini 2.5 Pro for analysis...")
+            prompt = (
+                f"Analyze the following medical product page content to determine SEO and Generative Engine Optimization (GEO) coverage.\n"
+                f"Identify missing keywords for India pharma demography (e.g. dosage, side effects, precautions, marketer, safety indicators).\n"
+                f"Identify missing search engine query prompts for the drug + route combination.\n\n"
+                f"Page Content:\n{raw_text}\n\n"
+                f"Response format MUST be a valid JSON dictionary containing keys:\n"
+                f"- 'seo_score' (integer 0-100)\n"
+                f"- 'geo_score' (integer 0-100)\n"
+                f"- 'missing_keywords' (list of strings)\n"
+                f"- 'missing_prompts' (list of strings)\n"
+                f"- 'suggestions' (list of strings)"
+            )
+            
+            import httpx
+            url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-pro:generateContent?key={settings.GEMINI_API_KEY}"
+            payload = {
+                "contents": [{"parts": [{"text": prompt}]}],
+                "generationConfig": {"responseMimeType": "application/json"}
+            }
+            resp = httpx.post(url, json=payload, timeout=30.0)
+            if resp.status_code == 200:
+                response_json = resp.json()
+                text_out = response_json["candidates"][0]["content"]["parts"][0]["text"]
+                results = json.loads(text_out)
+            else:
+                print(f"[SEO & Prompts Audit] Gemini API failed with status {resp.status_code}. Using fallback.")
+                results = analyze_seo_geo(html_content, data)
+        except Exception as err:
+            print(f"[SEO & Prompts Audit] Gemini API error: {str(err)}. Using fallback.")
+            results = analyze_seo_geo(html_content, data)
+            
+    # 4. Save results to Database
+    audit_record.seo_score = float(results.get("seo_score", 0.0))
+    audit_record.geo_score = float(results.get("geo_score", 0.0))
+    
+    # Save the detailed SEO/GEO JSON report
+    slug_dir = os.path.dirname(json_absolute_path)
+    report_file = os.path.join(slug_dir, "seo_geo_report.json")
+    with open(report_file, "w", encoding="utf-8") as rf:
+        json.dump(results, rf, indent=2, ensure_ascii=False)
+        
+    audit_record.seo_geo_report_path = str(Path(report_file).relative_to(settings.DATA_DIR))
+    db.commit()
+    print(f"[SEO & Prompts Audit] Complete. SEO: {audit_record.seo_score}, GEO: {audit_record.geo_score}")
