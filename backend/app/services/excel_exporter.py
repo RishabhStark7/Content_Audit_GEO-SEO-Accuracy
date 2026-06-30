@@ -50,6 +50,8 @@ def update_scraped_content_excel(db: Session):
                 faqs_list.append(f"Q: {q}\nA: {a}")
             faqs_str = "\n\n".join(faqs_list)
             
+            substitutes_str = "\n".join(data.get("substitutes", []))
+            
             row = {
                 "SKU ID": med.id,
                 "URLs": med.url,
@@ -57,12 +59,17 @@ def update_scraped_content_excel(db: Session):
                 "Generic Name": data.get("generic_name", med.generic_name),
                 "Dosage Form": data.get("dosage_form", ""),
                 "Strength": data.get("strength", ""),
+                "Product Summary": data.get("product_summary", ""),
                 "Product Introduction": data.get("product_introduction", ""),
                 "Uses": data.get("uses", ""),
                 "Benefits": data.get("benefits", ""),
                 "Side Effects": side_effects_str,
                 "How to Use": data.get("how_to_use", ""),
                 "How It Works": data.get("how_it_works", ""),
+                "Dosage": data.get("dosage", ""),
+                "Overdose": data.get("overdose", ""),
+                "Missed Dose": data.get("missed_dose", ""),
+                "Substitutes": substitutes_str,
                 "Alcohol Safety": safety.get("alcohol", ""),
                 "Pregnancy Safety": safety.get("pregnancy", ""),
                 "Breastfeeding Safety": safety.get("breastfeeding", ""),

@@ -106,10 +106,12 @@ def scrape_medicine(url: str, version_id: str = None) -> dict:
             args=["--disable-web-security", "--no-sandbox"]
         )
         
-        # Emulate a desktop viewport
+        # Emulate a mobile phone viewport (iPhone 12 Pro) to capture mobile layout and raw headings
         context = browser.new_context(
-            viewport={"width": 1280, "height": 1024},
-            user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+            viewport={"width": 390, "height": 844},
+            user_agent="Mozilla/5.0 (iPhone; CPU iPhone OS 14_8 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/14.1.2 Mobile/15E148 Safari/604.1",
+            is_mobile=True,
+            has_touch=True
         )
         
         page = context.new_page()

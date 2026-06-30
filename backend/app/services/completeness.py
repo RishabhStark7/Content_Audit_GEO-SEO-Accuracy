@@ -12,7 +12,8 @@ EXPECTED_ATTRIBUTES = [
     "how_to_use", "how_it_works", "alcohol", "pregnancy", 
     "breastfeeding", "driving", "kidney", "liver", "quick_tips", 
     "chemical_class", "therapeutic_class", "habit_forming", 
-    "action_class", "drug_interactions", "faqs"
+    "action_class", "drug_interactions", "faqs",
+    "product_summary", "dosage", "overdose", "missed_dose", "substitutes"
 ]
 
 def run_completeness_validation(db: Session, audit_record: AuditRecord):
@@ -43,12 +44,12 @@ def run_completeness_validation(db: Session, audit_record: AuditRecord):
     presence_matrix = {}
     
     # Text attributes directly in root
-    for attr in ["product_introduction", "uses", "benefits", "how_to_use", "how_it_works", "drug_interactions"]:
+    for attr in ["product_introduction", "uses", "benefits", "how_to_use", "how_it_works", "drug_interactions", "product_summary", "dosage", "overdose", "missed_dose"]:
         val = data.get(attr)
         presence_matrix[attr] = bool(val and len(str(val).strip()) > 3)
         
     # List attributes in root
-    for attr in ["side_effects", "quick_tips", "faqs"]:
+    for attr in ["side_effects", "quick_tips", "faqs", "substitutes"]:
         val = data.get(attr)
         presence_matrix[attr] = bool(val and len(val) > 0)
         

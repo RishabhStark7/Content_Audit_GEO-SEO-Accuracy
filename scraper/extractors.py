@@ -132,16 +132,16 @@ def extract_image_urls(soup: BeautifulSoup) -> List[str]:
 
 def extract_section_text(soup: BeautifulSoup, section_keywords: List[str]) -> str:
     for keyword in section_keywords:
-        headings = soup.find_all(['h2', 'h3', 'h4', 'div', 'span'], string=re.compile(r'^' + re.escape(keyword) + r'\b', re.I))
+        headings = soup.find_all(['h2', 'h3', 'h4'], string=re.compile(re.escape(keyword), re.I))
         for heading in headings:
             content = []
             curr = heading.find_next()
             while curr:
-                if curr.name in ['h2', 'h3', 'h1'] and curr.get_text(strip=True) != heading.get_text(strip=True):
+                if curr.name in ['h1', 'h2', 'h3'] and curr.get_text(strip=True) != heading.get_text(strip=True):
                     break
-                if curr.name in ['p', 'ul', 'ol', 'span', 'div'] and not curr.find(['h2', 'h3']):
+                if curr.name in ['p', 'li', 'span'] or (curr.name == 'div' and not curr.find(['p', 'h1', 'h2', 'h3', 'li'])):
                     txt = curr.get_text(strip=True)
-                    if txt and txt not in content:
+                    if txt and txt not in content and len(txt) > 3:
                         content.append(txt)
                 curr = curr.find_next()
             if content:
@@ -271,7 +271,22 @@ def extract_fact_box(soup: BeautifulSoup) -> Dict[str, str]:
     return fact_box
 
 def extract_drug_interactions(soup: BeautifulSoup) -> str:
-    return extract_section_text(soup, ["Drug Interactions", "Interactions", "Drug-Drug Interactions"])
+    return extract_section_text(soup, ["Drug Interactions", "Interactions", "Interaction with", "Interaction", "Drug-Drug Interactions"])
+
+def extract_substitutes(soup: BeautifulSoup) -> List[str]:
+    substitutes = []
+    heading = soup.find(['h2', 'h3', 'h4'], string=re.compile(r'substitutes', re.I))
+    if heading:
+        curr = heading.find_next()
+        while curr:
+            if curr.name in ['h1', 'h2'] and curr.get_text(strip=True) != heading.get_text(strip=True):
+                break
+            if curr.name == 'h3':
+                txt = curr.get_text(strip=True)
+                if txt and txt not in substitutes:
+                    substitutes.append(txt)
+            curr = curr.find_next()
+    return substitutes
 
 def extract_faqs(soup: BeautifulSoup) -> List[Dict[str, str]]:
     faqs = []
@@ -328,12 +343,17 @@ def parse_html_to_json(html_content: str) -> Dict[str, Any]:
         "generic_name": generic_name,
         "dosage_form": dosage_form,
         "strength": strength,
+        "product_summary": extract_section_text(soup, ["Product Summary", "Summary"]),
         "product_introduction": extract_section_text(soup, ["Product Introduction", "Introduction"]),
         "uses": extract_section_text(soup, ["Uses of", "Uses", "What is it prescribed for?"]),
         "benefits": extract_section_text(soup, ["Benefits of", "Benefits", "Key Benefits"]),
         "side_effects": extract_side_effects(soup),
         "how_to_use": extract_section_text(soup, ["How to use", "How to Use", "Directions for Use"]),
-        "how_it_works": extract_section_text(soup, ["How it works", "How it Works", "Mechanism of Action"]),
+        "how_it_works": extract_section_text(soup, ["works", "Mechanism of Action"]),
+        "dosage": extract_section_text(soup, ["Dosage"]),
+        "overdose": extract_section_text(soup, ["Overdose"]),
+        "missed_dose": extract_section_text(soup, ["Missed Dose"]),
+        "substitutes": extract_substitutes(soup),
         "safety": formatted_safety,
         "quick_tips": extract_quick_tips(soup),
         "fact_box": fact_box,
