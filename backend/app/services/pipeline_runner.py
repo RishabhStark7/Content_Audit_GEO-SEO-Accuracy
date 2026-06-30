@@ -301,15 +301,32 @@ def run_seo_prompts_phase(db: Session, medicines: list, logger: PipelineLogger):
             logger.set_stats(count)
             continue
             
-        # Since SEO is float, verify if it was audited by AI (we check report existence)
-        json_abs = os.path.join(settings.DATA_DIR, audit.json_path)
-        report_file = os.path.join(os.path.dirname(json_abs), "seo_geo_report.json")
-        
-        if os.path.exists(report_file):
-            logger.log(f"SKU #{med.id} SEO/Prompts already audited by AI. Skipping.")
+        # Check database scores first to avoid unnecessary actions
+        if audit.seo_score is not None and audit.geo_score is not None:
+            logger.log(f"SKU #{med.id} SEO/Prompts already audited. Skipping.")
             count += 1
             logger.set_stats(count)
             continue
+            
+        json_abs = os.path.join(settings.DATA_DIR, audit.json_path)
+        report_file = os.path.join(os.path.dirname(json_abs), "seo_geo_report.json")
+        
+        # If database has no score but local report exists, restore directly from disk cache
+        if os.path.exists(report_file):
+            try:
+                with open(report_file, "r", encoding="utf-8") as rf:
+                    saved_results = json.load(rf)
+                audit.seo_score = float(saved_results.get("seo_score", 0.0))
+                audit.geo_score = float(saved_results.get("geo_score", 0.0))
+                from pathlib import Path
+                audit.seo_geo_report_path = str(Path(report_file).relative_to(settings.DATA_DIR))
+                db.commit()
+                logger.log(f"SKU #{med.id} SEO/Prompts restored from existing report file. SEO: {audit.seo_score}, GEO: {audit.geo_score}")
+                count += 1
+                logger.set_stats(count)
+                continue
+            except Exception as e:
+                logger.log(f"Warning: Failed to restore existing SEO report for SKU #{med.id}: {str(e)}")
             
         logger.log(f"Running AI SEO & Prompts Audit for SKU #{med.id} ({med.name})...")
         try:
