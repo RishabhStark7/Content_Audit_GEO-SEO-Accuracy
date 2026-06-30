@@ -110,7 +110,7 @@ def update_batch_progress(db: Session):
         latest_audit = db.query(AuditRecord).filter(
             AuditRecord.medicine_id == med.id
         ).order_by(AuditRecord.scraped_at.desc()).first()
-        if latest_audit and latest_audit.status in ["Audited", "Failed"]:
+        if latest_audit and latest_audit.status in ["Completeness_Checked", "Audited", "Failed"]:
             completed_count += 1
             
     pending_count = total_skus - completed_count

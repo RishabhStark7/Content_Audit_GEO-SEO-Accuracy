@@ -62,6 +62,23 @@ def run_scraper_task(db_session_factory, url: str, medicine_id: int, version_id:
         audit_record.pdf_path = meta.get("pdf_path")
         audit_record.screenshot_path = meta.get("screenshot_path")
         audit_record.json_path = meta.get("json_path")
+        
+        # Save extracted name to the Medicine record
+        medicine = db.query(Medicine).filter(Medicine.id == audit_record.medicine_id).first()
+        if medicine:
+            # Read name from structured JSON if exists
+            json_abs_path = os.path.join(settings.DATA_DIR, audit_record.json_path)
+            if os.path.exists(json_abs_path):
+                try:
+                    with open(json_abs_path, "r", encoding="utf-8") as jf:
+                        jdata = json.load(jf)
+                        medicine.name = jdata.get("medicine_name", medicine.name)
+                except Exception as name_err:
+                    print(f"[Backend Subprocess] Failed to read name: {str(name_err)}")
+            
+            if not medicine.name:
+                medicine.name = slug.replace("-", " ").title()
+                
         db.commit()
         
         # Automatically trigger Part 1.5: Content Completeness Validation
