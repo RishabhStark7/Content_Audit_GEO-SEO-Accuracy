@@ -74,20 +74,20 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
 
   // Score circle rendering helper (Google Sans-style expanded and highly readable donut)
   const renderScoreCircle = (score: number, title: string, subtitle: string, color: string) => {
-    const radius = 52;
+    const radius = 62;
     const strokeWidth = 6;
     const circumference = 2 * Math.PI * radius;
     const offset = circumference - (score / 100) * circumference;
 
     return (
       <div className="glass-panel" style={{ padding: '24px', display: 'flex', flexDirection: 'column', alignItems: 'center', flex: '1', minWidth: '240px', backgroundColor: 'var(--bg-secondary)', border: '1px solid #dadce0', borderRadius: '8px' }}>
-        <div style={{ position: 'relative', width: '140px', height: '140px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-          <svg style={{ transform: 'rotate(-90deg)', width: '140px', height: '140px' }}>
-            <circle cx="70" cy="70" r={radius} fill="transparent" stroke="#f1f3f4" strokeWidth={strokeWidth} />
-            <circle cx="70" cy="70" r={radius} fill="transparent" stroke={color} strokeWidth={strokeWidth} strokeDasharray={circumference} strokeDashoffset={offset} strokeLinecap="round" style={{ transition: 'stroke-dashoffset 0.6s cubic-bezier(0.4, 0, 0.2, 1)' }} />
+        <div style={{ position: 'relative', width: '150px', height: '150px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+          <svg style={{ transform: 'rotate(-90deg)', width: '150px', height: '150px' }}>
+            <circle cx="75" cy="75" r={radius} fill="transparent" stroke="#f1f3f4" strokeWidth={strokeWidth} />
+            <circle cx="75" cy="75" r={radius} fill="transparent" stroke={color} strokeWidth={strokeWidth} strokeDasharray={circumference} strokeDashoffset={offset} strokeLinecap="round" style={{ transition: 'stroke-dashoffset 0.6s cubic-bezier(0.4, 0, 0.2, 1)' }} />
           </svg>
           <div style={{ position: 'absolute', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center' }}>
-            <span style={{ fontSize: '28px', fontWeight: '500', fontFamily: 'var(--font-display)', color: 'var(--text-primary)', lineHeight: '1.1' }}>{score}%</span>
+            <span style={{ fontSize: '22px', fontWeight: '500', fontFamily: 'var(--font-display)', color: 'var(--text-primary)', lineHeight: '1.1' }}>{score}%</span>
             <span style={{ fontSize: '11px', color: 'var(--text-secondary)', fontWeight: '400', marginTop: '4px' }}>{subtitle}</span>
           </div>
         </div>
