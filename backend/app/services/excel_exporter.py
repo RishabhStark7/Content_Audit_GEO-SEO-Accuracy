@@ -107,6 +107,12 @@ def update_scraped_content_excel(db: Session):
         # Write to excel using openpyxl engine
         df.to_excel(output_path, index=False)
         print(f"[Excel Exporter] Successfully wrote master sheet to: {output_path}")
+        
+        # Trigger progress logging
+        try:
+            update_batch_progress(db)
+        except Exception as prog_err:
+            print(f"[Excel Exporter] Error updating progress: {str(prog_err)}")
     except Exception as e:
         print(f"[Excel Exporter] Error writing Excel spreadsheet: {str(e)}")
 
