@@ -1,20 +1,20 @@
 :root {
-  --bg-primary: #f5f5f7;
+  --bg-primary: #f8f9fa;
   --bg-secondary: #ffffff;
-  --bg-tertiary: #e8e8ed;
-  --accent-blue: #0071e3;
-  --accent-purple: #af52de;
+  --bg-tertiary: #f1f3f4;
+  --accent-blue: #1a73e8;
+  --accent-purple: #a142f4;
   --accent-pink: #ff2d55;
-  --text-primary: #1d1d1f;
-  --text-secondary: #86868b;
-  --text-muted: #a1a1a6;
-  --status-success: #34c759;
-  --status-warning: #ff9500;
-  --status-danger: #ff3b30;
-  --border-glow: rgba(0, 113, 227, 0.08);
+  --text-primary: #202124;
+  --text-secondary: #5f6368;
+  --text-muted: #70757a;
+  --status-success: #1e8e3e;
+  --status-warning: #e37400;
+  --status-danger: #d93025;
+  --border-glow: rgba(26, 115, 232, 0.08);
   
-  --font-display: -apple-system, BlinkMacSystemFont, "SF Pro Display", "SF Pro Icons", "Helvetica Neue", Helvetica, Arial, sans-serif;
-  --font-body: -apple-system, BlinkMacSystemFont, "SF Pro Text", "SF Pro Icons", "Helvetica Neue", Helvetica, Arial, sans-serif;
+  --font-display: "Google Sans", "Product Sans", system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  --font-body: "Roboto", "Segoe UI", Arial, sans-serif;
 }
 
 * {
@@ -33,23 +33,23 @@ body {
 
 h1, h2, h3, h4 {
   font-family: var(--font-display);
-  font-weight: 600;
-  letter-spacing: -0.015em;
+  font-weight: 500;
+  letter-spacing: -0.01em;
   color: var(--text-primary);
 }
 
-/* Minimal Apple-Style Card Panels */
+/* Minimal Google-Style Cards */
 .glass-panel {
   background: var(--bg-secondary);
-  border: 1px solid rgba(0, 0, 0, 0.07);
-  border-radius: 12px;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.03), 0 1px 2px rgba(0, 0, 0, 0.02);
-  transition: all 0.25s cubic-bezier(0.25, 0.8, 0.25, 1);
+  border: 1px solid #dadce0;
+  border-radius: 8px;
+  box-shadow: none;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
 }
 
 .glass-panel:hover {
-  border-color: rgba(0, 113, 227, 0.3);
-  box-shadow: 0 8px 24px rgba(0, 113, 227, 0.06), 0 1px 3px rgba(0, 0, 0, 0.02);
+  border-color: #bdc1c6;
+  box-shadow: 0 1px 3px 0 rgba(60,64,67,0.3);
 }
 
 /* Custom Scrollbar */
