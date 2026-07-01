@@ -1,8 +1,8 @@
 import os
 import json
 import datetime
-import httpx  # type: ignore  # pyrefly: ignore
-from typing import List
+import re
+from typing import List, Dict, Any
 from sqlalchemy.orm import Session  # type: ignore  # pyrefly: ignore
 from backend.app.models.models import AuditRecord, Issue
 from backend.app.core.config import settings
@@ -15,21 +15,45 @@ REGULATORY_SOURCES = [
     "MHRA (Medicines and Healthcare products Regulatory Agency)",
     "Official SmPC (Summary of Product Characteristics)",
     "Official Package Insert",
-    "Government Treatment Guidelines"
+    "Government Treatment Guidelines",
+    "DailyMed 2026 Labels"
 ]
 
-def clean_generic_name(generic: str) -> str:
+def determine_route_from_sku(sku_name: str, dosage_form: str) -> str:
+    """ Determine the administration route from the SKU name and dosage form """
+    combined = f"{sku_name} {dosage_form}".lower()
+    if any(i in combined for i in ["eye", "ophthalmic", "ear"]):
+        return "ophthalmic"
+    elif "nasal" in combined:
+        return "nasal"
+    elif any(i in combined for i in ["injection", "infusion", "iv", "vial", "ampoule", "injectable"]):
+        return "injection"
+    elif any(t in combined for t in ["gel", "cream", "ointment", "spray", "topical", "lotion", "patch"]):
+        return "topical"
+    elif any(s in combined for s in ["syrup", "suspension", "liquid", "drops", "solution"]):
+        return "oral"
+    else:
+        return "oral"
+
+def clean_generic_and_fdc(generic: str) -> str:
+    """ Keep generic/salt names and FDC structure (A + B + C), removing strength units """
     if not generic:
         return "unknown"
-    return generic.split('(')[0].split('+')[0].split(',')[0].strip().lower()
+    # Remove strengths like (650mg), (100mg/ml), (500 mg + 150 mg) inside brackets/parentheses
+    cleaned = re.sub(r'\([^)]*\)', '', generic)
+    # Remove standalone strength numbers at the end
+    cleaned = re.sub(r'\b\d+(?:\.\d+)?\s*(?:mg|ml|mcg|g)\b', '', cleaned, flags=re.I)
+    # Standardize spaces around '+'
+    cleaned = re.sub(r'\s*\+\s*', ' + ', cleaned)
+    return cleaned.strip()
 
-def get_regulatory_reference_mock(generic_raw: str, source: str) -> str:
+def get_regulatory_reference_mock(generic_raw: str, route: str, source: str) -> str:
     """ Mock helper returning regulatory text references for audit benchmark """
-    generic = clean_generic_name(generic_raw)
+    generic = clean_generic_and_fdc(generic_raw).lower()
     
-    if "paracetamol" in generic:
+    if "paracetamol" in generic or "acetaminophen" in generic:
         return (
-            f"Regulatory Document ({source}) for Paracetamol:\n"
+            f"Regulatory Document ({source}) for Paracetamol ({route}):\n"
             f"Approved indications: Treatment of mild to moderate pain, fever.\n"
             f"Recommended dosage: 500mg to 1000mg every 4 to 6 hours as needed. Do not exceed 4000mg in 24 hours.\n"
             f"Contraindications: Severe hepatic impairment, active liver disease, hypersensitivity to paracetamol.\n"
@@ -38,16 +62,16 @@ def get_regulatory_reference_mock(generic_raw: str, source: str) -> str:
         )
     elif "amoxicillin" in generic:
         return (
-            f"Regulatory Document ({source}) for Amoxicillin:\n"
+            f"Regulatory Document ({source}) for Amoxicillin ({route}):\n"
             f"Approved indications: Treatment of susceptible bacterial infections including respiratory tract infections, otitis media, skin/soft tissue infections, and urinary tract infections.\n"
             f"Recommended dosage: 250mg to 500mg every 8 hours or 500mg to 875mg every 12 hours.\n"
             f"Contraindications: History of severe hypersensitivity reactions (e.g., anaphylaxis) to amoxicillin or other beta-lactams (penicillins, cephalosporins).\n"
             f"Warnings: Serious and occasionally fatal hypersensitivity (anaphylactic) reactions have been reported.\n"
             f"Side effects: Diarrhea, nausea, skin rash, vomiting."
         )
-    elif "linezolid" in generic or "zolexid" in generic:
+    elif "linezolid" in generic:
         return (
-            f"Regulatory Document ({source}) for Linezolid:\n"
+            f"Regulatory Document ({source}) for Linezolid ({route}) - Antibiotic:\n"
             f"Approved indications: Treatment of nosocomial pneumonia, community-acquired pneumonia, complicated skin and skin structure infections, and vancomycin-resistant Enterococcus faecium infections.\n"
             f"Recommended dosage: 600mg intravenously or orally every 12 hours for 10 to 14 days.\n"
             f"Contraindications: Known hypersensitivity to linezolid. Do not use in patients taking monoamine oxidase inhibitors (MAOIs).\n"
@@ -56,7 +80,7 @@ def get_regulatory_reference_mock(generic_raw: str, source: str) -> str:
         )
     elif "ibuprofen" in generic:
         return (
-            f"Regulatory Document ({source}) for Ibuprofen:\n"
+            f"Regulatory Document ({source}) for Ibuprofen ({route}):\n"
             f"Approved indications: Relief of mild to moderate pain, primary dysmenorrhea, rheumatoid arthritis, osteoarthritis, and reduction of fever.\n"
             f"Recommended dosage: 200mg to 400mg every 4 to 6 hours. Do not exceed 1200mg/day for over-the-counter use, or 3200mg/day for prescription use.\n"
             f"Contraindications: Known hypersensitivity to ibuprofen or other NSAIDs. Contraindicated in the setting of CABG surgery.\n"
@@ -65,7 +89,7 @@ def get_regulatory_reference_mock(generic_raw: str, source: str) -> str:
         )
     elif "pantoprazole" in generic:
         return (
-            f"Regulatory Document ({source}) for Pantoprazole:\n"
+            f"Regulatory Document ({source}) for Pantoprazole ({route}):\n"
             f"Approved indications: Short-term treatment of erosive esophagitis associated with GERD, maintenance of healing of erosive esophagitis, and pathological hypersecretory conditions including Zollinger-Ellison syndrome.\n"
             f"Recommended dosage: 40mg once daily for up to 8 weeks.\n"
             f"Contraindications: Known hypersensitivity to pantoprazole or other proton pump inhibitors (PPIs).\n"
@@ -74,7 +98,7 @@ def get_regulatory_reference_mock(generic_raw: str, source: str) -> str:
         )
     elif "atorvastatin" in generic:
         return (
-            f"Regulatory Document ({source}) for Atorvastatin:\n"
+            f"Regulatory Document ({source}) for Atorvastatin ({route}):\n"
             f"Approved indications: Reduction of elevated total cholesterol, LDL-cholesterol, apolipoprotein B, and triglycerides in patients with primary hypercholesterolemia. Secondary prevention of cardiovascular disease.\n"
             f"Recommended dosage: 10mg to 80mg once daily.\n"
             f"Contraindications: Active liver disease or unexplained persistent elevations of serum transaminases. Pregnancy and lactation.\n"
@@ -85,7 +109,7 @@ def get_regulatory_reference_mock(generic_raw: str, source: str) -> str:
         # Generic fallback
         title = generic_raw.capitalize() if generic_raw else "Active Ingredient"
         return (
-            f"Regulatory Document ({source}) for {title}:\n"
+            f"Regulatory Document ({source}) for {title} ({route}):\n"
             f"Approved indications: Treatment of conditions clinically indicated for {title}.\n"
             f"Recommended dosage: As prescribed by a registered medical practitioner.\n"
             f"Contraindications: Known hypersensitivity to {title}.\n"
@@ -93,38 +117,44 @@ def get_regulatory_reference_mock(generic_raw: str, source: str) -> str:
             f"Side effects: Nausea, dizziness, mild allergic reaction."
         )
 
-def call_gemini_audit_llm(drug_name: str, route: str, extracted_content: dict, references: List[str]) -> List[dict]:
+def call_gemini_audit_llm(drug_name: str, generic_name: str, route: str, extracted_content: dict, references: List[str]) -> List[dict]:
     """ 
-    Wrapper to call Gemini 2.5 Pro via Vertex AI or standard API key.
+    Wrapper to call Gemini via Vertex AI or standard API key.
     If no API key/project is configured, falls back to structural mock generation.
     """
     if not settings.GEMINI_API_KEY and not settings.VERTEX_PROJECT:
         print("[Audit Service] No Gemini API key or Vertex project set. Falling back to structural mock generation.")
-        return generate_mock_audit_issues(drug_name, route, extracted_content)
+        return generate_mock_audit_issues(drug_name, generic_name, route, extracted_content)
         
-    # Structural stub for actual LLM call:
     try:
         prompt = f"""
-        You are a medical content auditor. Compare the following medicine catalog content against the provided regulatory references.
-        Identify any inaccuracies, contradictions, low quality items, or missing warnings.
+        You are a senior medical content auditor. Compare the following medicine catalog content against the provided regulatory reference texts and standard clinical parameters.
         
         Medicine: {drug_name}
-        Route: {route}
+        Parsed Generic/Salt Name: {generic_name}
+        Route of Administration: {route}
         Extracted Catalog Content: {json.dumps(extracted_content)}
         Regulatory Reference Texts: {json.dumps(references)}
         
+        CRITICAL RULES FOR AUDITING ACCURACY:
+        1. Parse the exact drug/salt name along with the route of administration from the SKU details.
+        2. Evaluate against the latest 2026 SmPC, CDSCO, or DailyMed labels for this exact drug/salt and route.
+        3. In case of Fixed Dose Combinations (FDCs), if the generic name is A+B+C, ONLY look for the SmPC of A+B+C (do not evaluate against A+B+C+D).
+        4. Focus on exact medical accuracy. For example, Linezolid is a serious antibiotic and must NOT be described as a common fever/pain reliever.
+        5. Audit each and every content attribute (Uses, Side Effects, Dosage/How to Use, Safety warnings like Alcohol, Pregnancy, Driving, Kidney, Liver, etc.).
+        
         You must strictly output a JSON list of issues. Each issue must have these keys:
-        - attribute: string (e.g. 'Uses', 'Side Effects', 'Alcohol')
+        - attribute: string (e.g. 'Uses', 'Side Effects', 'Alcohol', 'Pregnancy', 'How to Use')
         - content_bucket: string ('Core Medical Content', 'Safety', 'Metadata', 'Drug Interactions', 'FAQs')
-        - issue_type: string (Must be one of: 'INC', 'CON', 'LCQ', 'MIS')
+        - issue_type: string (Must be one of: 'INC' for Incorrect, 'CON' for Contradiction, 'LCQ' for Low Content Quality, 'MIS' for Missing)
         - root_cause: string ('Regulatory Update', 'Editorial Error', 'Content Omission', 'Mapping Error', 'Legacy Content', 'Taxonomy Error', 'Unknown')
         - severity: string ('Critical', 'High', 'Medium', 'Low', 'Informational')
         - confidence: string ('Very High', 'High', 'Medium', 'Low')
-        - regulatory_source: string (e.g. 'FDA', 'CDSCO')
+        - regulatory_source: string (e.g. 'FDA 2026', 'CDSCO', 'DailyMed 2026')
         - regulatory_section: string
-        - current_content: string (what was wrong)
-        - suggested_content: string (what it should be changed to)
-        - evidence_text: string (direct quote from reference)
+        - current_content: string (what was wrong or incomplete)
+        - suggested_content: string (what it should be corrected to)
+        - evidence_text: string (direct quote or factual basis from regulatory source)
         """
         
         from backend.app.services.llm_client import call_gemini
@@ -132,21 +162,22 @@ def call_gemini_audit_llm(drug_name: str, route: str, extracted_content: dict, r
         return json.loads(text)
     except Exception as e:
         print(f"[Audit Service] Error calling Gemini API: {str(e)}. Falling back to mock generator.")
-        return generate_mock_audit_issues(drug_name, route, extracted_content)
+        return generate_mock_audit_issues(drug_name, generic_name, route, extracted_content)
 
-def generate_mock_audit_issues(drug_name: str, route: str, extracted_content: dict) -> List[dict]:
+def generate_mock_audit_issues(drug_name: str, generic_name: str, route: str, extracted_content: dict) -> List[dict]:
     """ 
     Generates mock compliance findings matching our taxonomy rules.
     Used for local testing when credentials are blank.
     """
     issues = []
     drug = drug_name.capitalize()
-    generic = clean_generic_name(extracted_content.get("generic_name", ""))
+    generic = clean_generic_and_fdc(generic_name).lower()
+    
+    uses_text = extracted_content.get("uses", "")
+    intro = extracted_content.get("product_introduction", "")
+    how_to_use = extracted_content.get("how_to_use", "")
     
     # 1. Contradiction finding (CON)
-    # If safety block text doesn't match the general description or uses
-    uses_text = extracted_content.get("uses", "")
-    
     if "paracetamol" in generic:
         if uses_text and "fever" not in uses_text.lower():
             issues.append({
@@ -163,7 +194,6 @@ def generate_mock_audit_issues(drug_name: str, route: str, extracted_content: di
                 "evidence_text": "Approved indications: Treatment of mild to moderate pain, fever."
             })
     elif "linezolid" in generic:
-        # Check if uses mentions severe bacterial infections
         if uses_text and "bacterial" not in uses_text.lower():
             issues.append({
                 "attribute": "Uses",
@@ -178,9 +208,8 @@ def generate_mock_audit_issues(drug_name: str, route: str, extracted_content: di
                 "suggested_content": "Linezolid is indicated for nosocomial pneumonia and complicated skin infections.",
                 "evidence_text": "Approved indications: Treatment of nosocomial pneumonia, community-acquired pneumonia, complicated skin and skin structure infections."
             })
-    
+            
     # 2. Low Content Quality finding (LCQ)
-    intro = extracted_content.get("product_introduction", "")
     if intro and len(intro) < 150:
         issues.append({
             "attribute": "Product Introduction",
@@ -197,7 +226,6 @@ def generate_mock_audit_issues(drug_name: str, route: str, extracted_content: di
         })
         
     # 3. Incorrect Information finding (INC)
-    how_to_use = extracted_content.get("how_to_use", "")
     if how_to_use:
         if "paracetamol" in generic:
             issues.append({
@@ -247,7 +275,7 @@ def generate_mock_audit_issues(drug_name: str, route: str, extracted_content: di
 def run_accuracy_audit(db: Session, audit_record: AuditRecord):
     """
     Module 3: Medical Accuracy Audit.
-    Evaluates the scraped JSON content using Gemini 2.5 Pro against regulatory sources.
+    Evaluates the scraped JSON content using Gemini Pro against regulatory sources.
     """
     print(f"[Audit Service] Triggered Accuracy Audit for audit: {audit_record.id}")
     
@@ -261,17 +289,21 @@ def run_accuracy_audit(db: Session, audit_record: AuditRecord):
         data = json.load(f)
         
     medicine_name = data.get("medicine_name", "Unknown Medicine")
-    generic_name = data.get("generic_name", "Unknown generic")
+    generic_raw = data.get("generic_name", "Unknown generic")
     dosage_form = data.get("dosage_form", "")
+    
+    # Determine proper drug/salt and route
+    generic_name = clean_generic_and_fdc(generic_raw)
+    route = determine_route_from_sku(medicine_name, dosage_form)
     
     # 2. Benchmark references lookup
     references = []
     for source in REGULATORY_SOURCES:
-        ref_text = get_regulatory_reference_mock(generic_name, source)
+        ref_text = get_regulatory_reference_mock(generic_name, route, source)
         references.append(ref_text)
         
     # 3. Call AI Auditor
-    audit_findings = call_gemini_audit_llm(medicine_name, dosage_form, data, references)
+    audit_findings = call_gemini_audit_llm(medicine_name, generic_name, route, data, references)
     
     # 4. Insert issues into database
     # Keep any existing MIS issues (which were logged by the completeness validator)
@@ -296,7 +328,7 @@ def run_accuracy_audit(db: Session, audit_record: AuditRecord):
             suggested_content=finding.get("suggested_content"),
             evidence_text=finding.get("evidence_text"),
             reviewer_status="Open",
-            reviewer_comments=f"Generated by Gemini 2.5 Pro auditor against {finding.get('regulatory_source', 'Regulatory Reference')}."
+            reviewer_comments=f"Generated by AI auditor against {finding.get('regulatory_source', 'Regulatory Reference')}."
         )
         db.add(issue)
         

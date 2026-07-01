@@ -12,6 +12,14 @@ def extract_product_name(soup: BeautifulSoup) -> str:
     return ""
 
 def extract_generic_name(soup: BeautifulSoup) -> str:
+    # 1. Search for links containing '/generics/' first
+    for a in soup.find_all('a'):
+        href = a.get('href', '')
+        if '/generics/' in href:
+            text = a.get_text(strip=True)
+            if text and not text.lower().endswith("route") and "contains" not in text.lower():
+                return text
+
     # Try exact match on 'Composition:' first
     elem = soup.find(string=re.compile(r'^Composition:$', re.I))
     if elem:
@@ -269,8 +277,8 @@ def extract_fact_box(soup: BeautifulSoup) -> Dict[str, str]:
             ("Habit Forming", "habit_forming"),
             ("Action Class", "action_class")
         ]:
-            elem = soup.find(string=re.compile(r'\b' + re.escape(label) + r'\b', re.I))
-            if elem:
+            elements = soup.find_all(string=re.compile(r'\b' + re.escape(label) + r'\b', re.I))
+            for elem in elements:
                 # Ensure it's not inside nav/drawer/sidebar/header/footer
                 ancestor = elem.parent
                 is_sidebar = False
@@ -291,6 +299,7 @@ def extract_fact_box(soup: BeautifulSoup) -> Dict[str, str]:
                         val_text = val_elem.get_text(strip=True)
                         if val_text and "verification" not in val_text.lower():
                             fact_box[key] = val_text
+                            break
                             
     return fact_box
 

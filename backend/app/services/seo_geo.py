@@ -3,48 +3,45 @@ import json
 import os
 from bs4 import BeautifulSoup  # type: ignore  # pyrefly: ignore
 from typing import Dict, List, Any
+from sqlalchemy.orm import Session  # type: ignore  # pyrefly: ignore
+from backend.app.models.models import AuditRecord
+from pathlib import Path
+from backend.app.core.config import settings
 
-# Benchmark Dictionary of top 5 brands for key generic drug + route combinations in India
+# Benchmark Dictionary of top 5 Indian brands for key generic drug + route combinations
 BENCHMARK_BRANDS = {
     ("paracetamol", "oral"): ["Calpol", "Dolo 650", "Crocin", "Pacimol", "Sumo L"],
     ("paracetamol", "injection"): ["Perfalgan", "Neomol", "Febrinil", "Kabimol", "Paracip IV"],
     ("paracetamol", "topical"): ["Thermacare", "Dynapar Gel", "Volini"],
     ("amoxicillin", "oral"): ["Mox", "Novamox", "Almox", "Moxikind", "Amoxycillin-Kid"],
     ("amoxicillin", "injection"): ["Clavam Injection", "Augmentin Injection", "Moxclav Injection", "Amoxyclav Injection", "Novamox Injection"],
+    ("linezolid", "oral"): ["Linospan", "Lizolid", "Linox", "Lizomac", "Lizoforce"],
+    ("linezolid", "injection"): ["Linospan IV", "Lizolid IV", "Linox IV", "Lizomac IV", "Lizoforce IV"],
     ("ibuprofen", "oral"): ["Brufen", "Ibugesic", "Combiflam", "Ibucon", "Anaflam"],
     ("pantoprazole", "oral"): ["Pan", "Pantocid", "Pantodac", "Pantosec", "Nupenta"],
     ("pantoprazole", "injection"): ["Pan IV", "Pantocid IV", "Pantodac IV", "Pantocork IV", "Pentalink IV"],
     ("atorvastatin", "oral"): ["Atorva", "Lipvas", "Tonact", "Storvas", "Lipicure"]
 }
 
-STANDARD_KEYWORDS = [
-    "side effects", "precautions", "dosage", "when to take", "how it works",
-    "pregnancy safety", "alcohol interactions", "kidney precautions", "liver precautions",
-    "driving safety", "composition", "alternative brands", "benefits"
-]
-
 def clean_generic_name(generic_name: str) -> str:
     """ Clean generic name to its base form (e.g. 'Paracetamol (650mg)' -> 'paracetamol') """
     if not generic_name:
         return "unknown"
-    # Take first word or up to parenthesis/plus/comma
     name = generic_name.split('(')[0].split('+')[0].split(',')[0].strip()
     return name.lower()
 
-def determine_route(dosage_form: str) -> str:
-    """ Determine the administration route from the dosage form """
-    if not dosage_form:
-        return "oral"
-    form_lower = dosage_form.lower()
-    if any(i in form_lower for i in ["eye", "ophthalmic", "ear"]):
+def determine_route(sku_name: str, dosage_form: str) -> str:
+    """ Determine the administration route from SKU name and dosage form """
+    combined = f"{sku_name} {dosage_form}".lower()
+    if any(i in combined for i in ["eye", "ophthalmic", "ear"]):
         return "ophthalmic"
-    elif "nasal" in form_lower:
+    elif "nasal" in combined:
         return "nasal"
-    elif any(i in form_lower for i in ["injection", "infusion", "iv", "vial", "ampoule"]):
+    elif any(i in combined for i in ["injection", "infusion", "iv", "vial", "ampoule", "injectable"]):
         return "injection"
-    elif any(t in form_lower for t in ["gel", "cream", "ointment", "spray", "topical", "lotion"]):
+    elif any(t in combined for t in ["gel", "cream", "ointment", "spray", "topical", "lotion", "patch"]):
         return "topical"
-    elif any(s in form_lower for s in ["syrup", "suspension", "liquid", "drops"]):
+    elif any(s in combined for s in ["syrup", "suspension", "liquid", "drops", "solution"]):
         return "oral"
     else:
         return "oral"
@@ -55,7 +52,6 @@ def get_benchmark_brands(generic: str, route: str) -> List[str]:
     if key in BENCHMARK_BRANDS:
         return BENCHMARK_BRANDS[key]
     
-    # Dynamic fallback generator if not in dictionary
     title_case_generic = generic.capitalize()
     return [
         f"{title_case_generic} Cipla",
@@ -65,154 +61,100 @@ def get_benchmark_brands(generic: str, route: str) -> List[str]:
         f"{title_case_generic} Alkem"
     ]
 
-def evaluate_content_seo_geo_score(html_content: str, structured_data: dict, route: str) -> tuple[float, list[str]]:
+def evaluate_content_seo_geo_score(structured_data: dict, route: str) -> tuple[float, list[str]]:
     """
-    Computes a merged Content-Led SEO & GEO Score out of 100 points.
+    Computes a Content-Led SEO & GEO Score out of 100 points.
     Formula:
-    - Technical SEO parameters: Max 20 points (headings structure, meta description)
-    - Generative AI markup: Max 20 points (JSON-LD schema, lists/bullets layout)
-    - Content-Led Keyword Density: Max 30 points (occurrence frequency of 13 standard keywords)
-    - Route-Subjective Prompts Coverage: Max 30 points (evaluated out of relevant layman queries)
+    - Competitor Brand / Keyword Coverage: Max 40 points
+    - Indian User Route/Drug Value-Add Prompts Coverage: Max 60 points
     """
     score = 0.0
-    soup = BeautifulSoup(html_content, 'lxml')
     text_content = flatten_text(structured_data).lower()
-    
-    # 1. Technical SEO & Generative Parameters (Max 40 points)
-    # Heading structure (Max 10 pts)
-    h1s = soup.find_all('h1')
-    if len(h1s) == 1:
-        score += 10.0
-    elif len(h1s) > 1:
-        score += 5.0
-        
-    # Meta description (Max 10 pts)
-    meta_desc = soup.find('meta', attrs={'name': re.compile(r'description', re.I)})
-    if meta_desc:
-        content_val = meta_desc.get('content')
-        if content_val and len(str(content_val)) > 50:
-            score += 10.0
-        else:
-            score += 5.0
-            
-    # JSON-LD Schema markup (Max 10 pts)
-    schemas = soup.find_all('script', type='application/ld+json')
-    if any(any(ctx in s.get_text() for ctx in ['"FAQPage"', '"Drug"', '"BreadcrumbList"']) for s in schemas):
-        score += 10.0
-        
-    # Readability list layouts (Max 10 pts)
-    if structured_data.get('quick_tips') or structured_data.get('side_effects'):
-        score += 10.0
-
-    # 2. Content-Led Keyword Density (Max 30 points)
-    distinct_kws = 0
-    total_freq = 0
-    for kw in STANDARD_KEYWORDS:
-        freq = len(re.findall(r'\b' + re.escape(kw) + r'\b', text_content))
-        if freq > 0:
-            distinct_kws += 1
-            total_freq += freq
-            
-    if distinct_kws >= 8:
-        score += 20.0
-    elif distinct_kws >= 4:
-        score += 10.0
-        
-    if total_freq >= 15:
-        score += 10.0
-    elif total_freq >= 8:
-        score += 5.0
-
-    # 3. Route-Subjective layman query prompts (Max 30 points)
     generic_clean = clean_generic_name(structured_data.get("generic_name", ""))
-    title_case_drug = generic_clean.capitalize()
     
-    if route == "injection":
+    # 1. Competitor Brand Keyword Density (Max 40 points)
+    # Check if competitor brand names or their variants are present in content comparisons
+    benchmark_brands = get_benchmark_brands(generic_clean, route)
+    brands_found = 0
+    for brand in benchmark_brands:
+        if brand.lower() in text_content:
+            brands_found += 1
+            
+    # Score allocation: 40 points if at least 1 competitor brand keyword is naturally referenced for comparison,
+    # otherwise 0 points.
+    if brands_found >= 1:
+        score += 40.0
+
+    # 2. Value-Addition Prompts Coverage (Max 60 points)
+    # Layman-friendly, Indian-user-focused prompts (no generic OTC or composition checks)
+    if "paracetamol" in generic_clean:
         prompts = [
-            f"What is the correct dose of {title_case_drug} {route}?",
-            f"What are the common side effects of {title_case_drug}?",
-            f"Are there any serious drug interactions with {title_case_drug}?",
-            f"Is {title_case_drug} safe during pregnancy?",
-            f"What are the cheap alternative brand substitutes for {title_case_drug}?",
-            f"How exactly does {title_case_drug} work to cure my symptoms?"
+            f"How fast does this paracetamol start working compared to Calpol or Dolo 650?",
+            f"Should I take this medicine after food to avoid stomach upset?",
+            f"Is it safe to take this medicine for viral fever or dengue?",
+            f"What is the gap between two doses of paracetamol tablets?",
+            f"Can I take this medicine if I have high blood pressure or diabetes?",
+            f"What are the liver safety precautions to take with paracetamol in India?"
         ]
         match_keys = [
-            ["dosage", "dose", "correct dose", "amount", "administer"],
-            ["side effect", "adverse", "vomit", "nausea", "pain", "swelling"],
-            ["interaction", "drug interaction", "contraindication", "avoid"],
-            ["pregnancy", "pregnant", "breastfeed", "lactat", "womb"],
-            ["alternative", "substitute", "brand substitute", "similar brand", "cheap"],
-            ["mechanism", "works", "mechanism of action", "symptoms", "cures", "how exactly"]
+            ["fast", "quick", "work", "dolo", "calpol", "starts working", "crocin"],
+            ["food", "stomach", "after food", "empty stomach", "upset"],
+            ["viral", "dengue", "malaria", "typhoid", "dengue fever"],
+            ["gap", "hours", "interval", "between two doses", "frequently", "repeat"],
+            ["blood pressure", "diabetes", "hypertension", "bp", "sugar"],
+            ["liver", "hepatic", "hepatotoxicity", "alcohol", "damage", "overdose"]
         ]
-    elif route == "topical":
+    elif "linezolid" in generic_clean:
         prompts = [
-            f"What is the correct application of {title_case_drug} {route}?",
-            f"Is {title_case_drug} safe to apply on the skin?",
-            f"What are the common local side effects of {title_case_drug}?",
-            f"What are the cheap alternative brand substitutes for {title_case_drug}?",
-            f"How exactly does {title_case_drug} work to cure my symptoms?"
+            f"Is it safe to take linezolid tablets for simple throat infections?",
+            f"What food items (like cheese or curd) should I avoid while taking linezolid?",
+            f"Why is my blood count monitored weekly during linezolid treatment?",
+            f"How long should I continue taking linezolid for pneumonia?",
+            f"Can linezolid be used for tuberculosis (TB) treatment in India?",
+            f"What should I do if I experience numbness or tingling in hands or feet?"
         ]
         match_keys = [
-            ["dosage", "apply", "application", "thin layer", "amount"],
-            ["skin", "face", "apply", "cream", "gel", "ointment", "external"],
-            ["side effect", "adverse", "irritation", "burning", "redness", "itching"],
-            ["alternative", "substitute", "brand substitute", "similar brand", "cheap"],
-            ["mechanism", "works", "mechanism of action", "symptoms", "cures", "how exactly"]
+            ["simple", "throat", "cough", "cold", "common infection"],
+            ["food", "cheese", "curd", "tyramine", "avoid", "diet"],
+            ["blood count", "weekly", "cbc", "myelosuppression", "platelets", "anemia"],
+            ["duration", "days", "long", "pneumonia", "continue"],
+            ["tuberculosis", "tb", "mdr-tb", "resistant"],
+            ["numbness", "tingling", "neuropathy", "feet", "hands", "nerve"]
         ]
-    elif route == "ophthalmic":
+    elif "amoxicillin" in generic_clean:
         prompts = [
-            f"What is the correct dose / drop count of {title_case_drug} {route}?",
-            f"Is {title_case_drug} safe to use with contact lenses?",
-            f"What are the common eye side effects of {title_case_drug}?",
-            f"What are the cheap alternative brand substitutes for {title_case_drug}?",
-            f"How exactly does {title_case_drug} work to cure my symptoms?"
+            f"Should I complete the amoxicillin course even if I feel better?",
+            f"Can amoxicillin cure common cold or flu?",
+            f"What should I do if I get a skin rash or diarrhea after taking amoxicillin?",
+            f"Can I take amoxicillin tablet with milk or juice?",
+            f"Is amoxicillin safe for children's dental infections?",
+            f"What are the common antibiotic resistance warnings for amoxicillin in India?"
         ]
         match_keys = [
-            ["drops", "instill", "correct dose", "amount"],
-            ["contact lenses", "contacts", "lens", "glasses"],
-            ["side effect", "adverse", "stinging", "burning", "blurred vision", "irritation"],
-            ["alternative", "substitute", "brand substitute", "similar brand", "cheap"],
-            ["mechanism", "works", "mechanism of action", "symptoms", "cures", "how exactly"]
+            ["complete", "course", "stop", "feel better", "duration"],
+            ["cold", "flu", "viral", "cough", "virus"],
+            ["rash", "diarrhea", "loose motion", "allergy", "side effect"],
+            ["milk", "juice", "water", "food", "fluid"],
+            ["children", "kids", "dental", "tooth", "infection"],
+            ["resistance", "antibiotic resistance", "superbug", "misuse", "overuse"]
         ]
-    elif route == "nasal":
+    else:
+        # Fallback prompts for other generic medicines
         prompts = [
-            f"What is the correct sprays count of {title_case_drug} {route}?",
-            f"Is {title_case_drug} safe for long term nasal use?",
-            f"What are the common nasal side effects of {title_case_drug}?",
-            f"What are the cheap alternative brand substitutes for {title_case_drug}?",
-            f"How exactly does {title_case_drug} work to cure my symptoms?"
+            f"How does this medicine compare to the top brands?",
+            f"Should I take this medicine with or without food?",
+            f"What is the correct storage condition for this medicine in Indian summer?",
+            f"How long does it take for this medicine to show its full effect?",
+            f"What are the critical warning signs that require stopping this medicine immediately?",
+            f"Can I take this medicine along with my regular blood pressure or diabetes drugs?"
         ]
         match_keys = [
-            ["sprays", "nostril", "instill", "dose", "amount"],
-            ["long term", "rebound", "congestion", "addiction", "habit"],
-            ["side effect", "adverse", "dryness", "nosebleed", "sneezing", "irritation"],
-            ["alternative", "substitute", "brand substitute", "similar brand", "cheap"],
-            ["mechanism", "works", "mechanism of action", "symptoms", "cures", "how exactly"]
-        ]
-    else:  # default oral
-        prompts = [
-            f"What is the correct dose of {title_case_drug} {route}?",
-            f"How many times a day should I take {title_case_drug}?",
-            f"Is {title_case_drug} safe during pregnancy?",
-            f"What are the common side effects of {title_case_drug}?",
-            f"Can I drink alcohol after taking {title_case_drug}?",
-            f"Are there any serious drug interactions with {title_case_drug}?",
-            f"What happens if I take a double dose of {title_case_drug}?",
-            f"Can I buy {title_case_drug} without a prescription in India?",
-            f"What are the cheap alternative brand substitutes for {title_case_drug}?",
-            f"How exactly does {title_case_drug} work to cure my symptoms?"
-        ]
-        match_keys = [
-            ["dosage", "dose", "correct dose", "amount"],
-            ["times a day", "daily", "frequency", "how often", "schedule"],
-            ["pregnancy", "pregnant", "breastfeed", "lactat", "womb"],
-            ["side effect", "adverse", "vomit", "nausea", "headache", "rash"],
-            ["alcohol", "liquor", "drink", "beer", "wine"],
-            ["interaction", "drug interaction", "contraindication", "avoid"],
-            ["overdose", "toxicity", "excessive", "double dose", "accidental"],
-            ["prescription", "rx", "otc", "without a prescription", "over the counter"],
-            ["alternative", "substitute", "brand substitute", "similar brand", "cheap"],
-            ["mechanism", "works", "mechanism of action", "symptoms", "cures", "how exactly"]
+            ["compare", "alternative", "brand", "better", "substitute"],
+            ["food", "empty stomach", "after food", "meals"],
+            ["storage", "cool", "heat", "summer", "temperature", "light"],
+            ["long", "effect", "action", "work", "absorb"],
+            ["warning", "stop", "immediate", "emergency", "doctor", "severe"],
+            ["regular", "blood pressure", "diabetes", "interaction", "co-administration"]
         ]
         
     covered_count = 0
@@ -223,7 +165,7 @@ def evaluate_content_seo_geo_score(html_content: str, structured_data: dict, rou
         else:
             missing_prompts.append(pr)
             
-    coverage_score = (covered_count / len(prompts)) * 30.0
+    coverage_score = (covered_count / len(prompts)) * 60.0
     score += coverage_score
     
     return max(0.0, min(100.0, score)), missing_prompts
@@ -238,88 +180,90 @@ def flatten_text(data: Any) -> str:
     return ""
 
 def analyze_seo_geo(html_content: str, structured_data: dict) -> dict:
-    """ Performs complete SEO/GEO gap analysis """
+    """ Performs complete SEO/GEO gap analysis without meta-tag constraints """
     generic_raw = structured_data.get("generic_name", "")
     generic_clean = clean_generic_name(generic_raw)
-    route = determine_route(structured_data.get("dosage_form", ""))
+    
+    medicine_name = structured_data.get("medicine_name", "")
+    dosage_form = structured_data.get("dosage_form", "")
+    route = determine_route(medicine_name, dosage_form)
     
     benchmark_brands = get_benchmark_brands(generic_clean, route)
-    text_content = flatten_text(structured_data).lower()
     
-    # 1. Identify missing keywords
+    # Evaluate score and identify missing prompts
+    score, missing_prompts = evaluate_content_seo_geo_score(structured_data, route)
+    
+    # Missing keywords: competitor brands or specific warning points not covered in the text
     missing_keywords = []
-    target_keywords = STANDARD_KEYWORDS + [b.lower() for b in benchmark_brands]
-    for kw in target_keywords:
-        if kw not in text_content:
-            missing_keywords.append(kw)
-    missing_keywords = missing_keywords[:10]
-    
-    # 2. Evaluate merged SEO-GEO score and identify missing prompts
-    score, missing_prompts = evaluate_content_seo_geo_score(html_content, structured_data, route)
-    
+    text_content = flatten_text(structured_data).lower()
+    for brand in benchmark_brands:
+        if brand.lower() not in text_content:
+            missing_keywords.append(brand)
+            
+    # Append value-add key clinical parameters if missing
+    for clinical_kw in ["dosing frequency", "food interactions", "viral infections", "storage instructions", "safety warnings"]:
+        if clinical_kw not in text_content:
+            missing_keywords.append(clinical_kw)
+            
     return {
         "generic_drug": generic_clean,
         "route_of_administration": route,
         "benchmark_brands": benchmark_brands,
         "seo_score": score,
         "geo_score": score,
-        "missing_keywords": missing_keywords,
+        "missing_keywords": missing_keywords[:10],
         "missing_prompts": missing_prompts
     }
 
-from sqlalchemy.orm import Session  # type: ignore  # pyrefly: ignore
-from backend.app.models.models import AuditRecord
-from pathlib import Path
-from backend.app.core.config import settings
-
 def run_seo_geo_ai_audit(db: Session, audit_record: AuditRecord):
     """
-    Module 5: AI-based SEO & Prompts Audit.
-    Performs generative optimization analysis and prompt coverage checks,
-    updating the scores in the database.
+    Module 5: AI-based SEO & Prompts Audit using Indian user value-addition points.
     """
     print(f"[SEO & Prompts Audit] Triggered for audit: {audit_record.id}")
     
-    # 1. Load HTML and JSON content
+    # 1. Load JSON content
     json_absolute_path = os.path.join(settings.DATA_DIR, audit_record.json_path)
-    html_absolute_path = os.path.join(settings.DATA_DIR, audit_record.html_path)
-    
-    if not os.path.exists(json_absolute_path) or not os.path.exists(html_absolute_path):
-        print(f"[SEO & Prompts Audit] Error: Files not found for audit {audit_record.id}")
+    if not os.path.exists(json_absolute_path):
+        print(f"[SEO & Prompts Audit] Error: Structured JSON not found for audit {audit_record.id}")
         return
         
     with open(json_absolute_path, "r", encoding="utf-8") as f:
         data = json.load(f)
         
-    with open(html_absolute_path, "r", encoding="utf-8") as f:
-        html_content = f.read()
-        
-    # 2. Token Governance: Truncate content to avoid token overflow
     raw_text = flatten_text(data)
-    max_char_limit = 8000
-    if len(raw_text) > max_char_limit:
-        print(f"[Token Governance] WARNING: Input text is {len(raw_text)} chars. Truncating to {max_char_limit} chars to conserve tokens.")
-        raw_text = raw_text[:max_char_limit]
-        
-    # 3. Call AI or run local heuristic fallback
+    
+    # 2. Call AI or run local heuristic fallback
     if not settings.GEMINI_API_KEY and not settings.VERTEX_PROJECT:
-        print("[SEO & Prompts Audit] No Gemini key set. Falling back to local rules analysis.")
-        results = analyze_seo_geo(html_content, data)
+        print("[SEO & Prompts Audit] No Gemini key/Vertex project set. Falling back to local rules analysis.")
+        results = analyze_seo_geo("", data)
     else:
         try:
-            print("[SEO & Prompts Audit] Calling Gemini 2.5 Pro for analysis...")
+            print("[SEO & Prompts Audit] Calling Gemini for analysis...")
+            medicine_name = data.get("medicine_name", "")
+            dosage_form = data.get("dosage_form", "")
+            route = determine_route(medicine_name, dosage_form)
+            generic_clean = clean_generic_name(data.get("generic_name", ""))
+            benchmark_brands = get_benchmark_brands(generic_clean, route)
+            
             prompt = (
-                f"Analyze the following medical product page content to determine SEO and Generative Engine Optimization (GEO) coverage.\n"
-                f"Identify missing keywords that are highly relevant to the Indian userbase (e.g. safety warnings, pregnancy safety, side effects, cheap alternatives, precautions, composition).\n"
-                f"Identify missing search engine query prompts that are layman-friendly and highly realistic for what an end user in India would search (e.g. 'Can I drink alcohol?', 'Is it safe during pregnancy?', 'cheap alternatives', 'correct dose'). Avoid technical jargon or queries about manufacturers.\n"
-                f"Make sure to keep the calculated scores bounded: seo_score and geo_score MUST be integers between 0 and 100.\n\n"
+                f"Analyze the following medical product page content to determine SEO and GEO (Generative Engine Optimization) coverage.\n\n"
+                f"SKU: {medicine_name}\n"
+                f"Generic/Salt: {generic_clean}\n"
+                f"Route of Administration: {route}\n"
+                f"Top Competitor Brands: {', '.join(benchmark_brands)}\n\n"
+                f"CRITICAL RULES:\n"
+                f"1. DO NOT evaluate or score generic HTML elements like meta description, title tags, or H1 structures.\n"
+                f"2. Evaluate brand/keyword coverage: Check if the content references top competitor brands for comparison or contains key clinical keywords.\n"
+                f"3. Evaluate layman-friendly, Indian-user-focused prompts that are highly relevant to this drug and route (e.g. food interactions, duration, speed of action, safety in specific conditions like viral fever).\n"
+                f"4. DO NOT suggest general prompts like 'can I get it without prescription' or 'what is the composition'. Only identify value-add points.\n"
+                f"5. Store a final seo_score and geo_score between 0 and 100.\n\n"
                 f"Page Content:\n{raw_text}\n\n"
                 f"Response format MUST be a valid JSON dictionary containing keys:\n"
                 f"- 'seo_score' (integer 0-100)\n"
                 f"- 'geo_score' (integer 0-100)\n"
-                f"- 'missing_keywords' (list of strings)\n"
-                f"- 'missing_prompts' (list of strings)\n"
-                f"- 'suggestions' (list of strings)"
+                f"- 'missing_keywords' (list of strings representing specific missing brands or clinical terms)\n"
+                f"- 'missing_prompts' (list of strings representing value-add layman queries that are not addressed in the text)\n"
+                f"- 'suggestions' (list of strings for improvements)"
             )
             
             from backend.app.services.llm_client import call_gemini
@@ -327,16 +271,15 @@ def run_seo_geo_ai_audit(db: Session, audit_record: AuditRecord):
             results = json.loads(text_out)
         except Exception as err:
             print(f"[SEO & Prompts Audit] Gemini API failed: {str(err)}. Using fallback.")
-            results = analyze_seo_geo(html_content, data)
+            results = analyze_seo_geo("", data)
             
-    # 4. Save results to Database (Merge SEO and GEO scores)
+    # 3. Save results to Database
     avg_score = (float(results.get("seo_score", 0.0)) + float(results.get("geo_score", 0.0))) / 2.0
     merged_score = max(0.0, min(100.0, avg_score))
     
     audit_record.seo_score = merged_score
     audit_record.geo_score = merged_score
     
-    # Store merged score back to results so that report file contains it too
     results["seo_score"] = merged_score
     results["geo_score"] = merged_score
     
@@ -348,4 +291,4 @@ def run_seo_geo_ai_audit(db: Session, audit_record: AuditRecord):
         
     audit_record.seo_geo_report_path = str(Path(report_file).relative_to(settings.DATA_DIR))
     db.commit()
-    print(f"[SEO & Prompts Audit] Complete. SEO: {audit_record.seo_score}, GEO: {audit_record.geo_score}")
+    print(f"[SEO & Prompts Audit] Complete. SEO/GEO: {audit_record.seo_score}")
