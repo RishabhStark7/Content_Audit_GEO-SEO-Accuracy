@@ -132,23 +132,43 @@ def upload_excel(file: UploadFile = File(...), db: Session = Depends(get_db)):
         
         imported_medicines = []
         for _, row in df.iterrows():
-            # Get URL, which is required
             url_col = None
             for key in ["medicine url", "url", "urls", "sku urls", "sku url"]:
                 if key in df.columns:
                     url_col = key
                     break
                     
-            if not url_col or pd.isna(row[url_col]):
+            if not url_col:
                 continue
                 
-            url = str(row[url_col]).strip()
+            val = row[url_col]
+            if val is None or (isinstance(val, float) and val != val):
+                continue
+                
+            url = str(val).strip()
+            if not url or url.lower() in ["nan", "none", "null"]:
+                continue
             
             # Extract optional columns
-            name = str(row["product name"]).strip() if "product name" in df.columns and not pd.isna(row["product name"]) else None
-            priority = str(row["priority"]).strip() if "priority" in df.columns and not pd.isna(row["priority"]) else "Medium"
-            owner = str(row["owner"]).strip() if "owner" in df.columns and not pd.isna(row["owner"]) else None
-            category = str(row["category"]).strip() if "category" in df.columns and not pd.isna(row["category"]) else None
+            name_val = row["product name"] if "product name" in df.columns else None
+            name = str(name_val).strip() if (name_val is not None and not (isinstance(name_val, float) and name_val != name_val)) else None
+            if name and name.lower() in ["nan", "none", "null"]:
+                name = None
+            
+            prio_val = row["priority"] if "priority" in df.columns else None
+            priority = str(prio_val).strip() if (prio_val is not None and not (isinstance(prio_val, float) and prio_val != prio_val)) else "Medium"
+            if priority.lower() in ["nan", "none", "null"]:
+                priority = "Medium"
+            
+            owner_val = row["owner"] if "owner" in df.columns else None
+            owner = str(owner_val).strip() if (owner_val is not None and not (isinstance(owner_val, float) and owner_val != owner_val)) else None
+            if owner and owner.lower() in ["nan", "none", "null"]:
+                owner = None
+            
+            cat_val = row["category"] if "category" in df.columns else None
+            category = str(cat_val).strip() if (cat_val is not None and not (isinstance(cat_val, float) and cat_val != cat_val)) else None
+            if category and category.lower() in ["nan", "none", "null"]:
+                category = None
             
             # Check if URL already exists
             existing = db.query(Medicine).filter(Medicine.url == url).first()

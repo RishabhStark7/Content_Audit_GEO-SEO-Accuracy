@@ -182,34 +182,42 @@ def extract_safety_advice(soup: BeautifulSoup) -> Dict[str, Dict[str, str]]:
         "liver": {"risk": "Unknown", "description": ""},
     }
     
-    for key in safety.keys():
-        # Find h3 containing warning label (e.g. Alcohol)
-        h3_elem = soup.find(lambda tag: tag.name == "h3" and re.search(r'\b' + re.escape(key) + r'\b', tag.get_text(), re.I))
+    patterns = {
+        "alcohol": r"alcohol",
+        "pregnancy": r"pregnancy",
+        "breastfeeding": r"breast\s*feeding",
+        "driving": r"driving",
+        "kidney": r"kidney",
+        "liver": r"liver"
+    }
+    
+    for key, pattern in patterns.items():
+        # Find h3 containing the warning label
+        h3_elem = soup.find(lambda tag: tag.name == "h3" and re.search(pattern, tag.get_text(), re.I))
         if h3_elem:
-            # Walk up to get card container
-            card = h3_elem.parent
-            while card and not (card.name == 'div' and any('flexColumn' in c for c in card.get('class', []))):
-                card = card.parent
+            # Walk up to find the flex row container containing the two columns
+            row = h3_elem.parent
+            while row and not (row.name == 'div' and 'flex' in row.get('class', []) and row.find(class_=re.compile(r'col-4'))):
+                row = row.parent
                 
-            if card:
-                # Find risk badge (UNSAFE, SAFE, CAUTION)
-                risk_elem = card.find(class_=re.compile(r'Tag__tag|bodyMediumBold', re.I))
-                if risk_elem:
-                    safety[key]["risk"] = risk_elem.get_text(strip=True).upper()
+            if row:
+                col_4 = row.find(class_=re.compile(r'col-4'))
+                if col_4:
+                    # Extract risk badge
+                    risk_badge = col_4.find(class_=re.compile(r'Tag-module__tag|Tag__tag|bodyMediumBold|Tag'))
+                    risk = "UNKNOWN"
+                    if risk_badge:
+                        risk = risk_badge.get_text(strip=True).upper()
+                    else:
+                        span = col_4.find('span')
+                        if span:
+                            risk = span.get_text(strip=True).upper()
+                    safety[key]["risk"] = risk
                     
-                desc_elements = []
-                summary_elem = card.find(class_=re.compile(r'textSupporting', re.I))
-                if summary_elem:
-                    desc_elements.append(summary_elem.get_text(strip=True))
+                    # Extract description
+                    desc_elem = col_4.find(class_=re.compile(r'smallRegular|breakWord|description|textSupporting'))
+                    safety[key]["description"] = desc_elem.get_text(strip=True) if desc_elem else ""
                     
-                # Look for list item descriptions in grandparent block
-                grandparent = card.parent
-                if grandparent:
-                    for li in grandparent.find_all('li'):
-                        desc_elements.append(li.get_text(strip=True))
-                        
-                safety[key]["description"] = " ".join(desc_elements)
-                
     return safety
 
 def extract_quick_tips(soup: BeautifulSoup) -> List[str]:
@@ -263,11 +271,27 @@ def extract_fact_box(soup: BeautifulSoup) -> Dict[str, str]:
         ]:
             elem = soup.find(string=re.compile(r'\b' + re.escape(label) + r'\b', re.I))
             if elem:
-                parent = elem.parent
-                val_elem = parent.find_next(class_=re.compile(r'factValue|bodyMediumBold|value', re.I))
-                if val_elem:
-                    fact_box[key] = val_elem.get_text(strip=True)
+                # Ensure it's not inside nav/drawer/sidebar/header/footer
+                ancestor = elem.parent
+                is_sidebar = False
+                while ancestor:
+                    if ancestor.name in ['nav', 'header', 'footer']:
+                        is_sidebar = True
+                        break
+                    classes = ancestor.get('class', [])
+                    if any(any(x in str(c).lower() for x in ['drawer', 'menu', 'sidebar', 'nav-drawer', 'header', 'footer', 'dropdown']) for c in classes):
+                        is_sidebar = True
+                        break
+                    ancestor = ancestor.parent
                     
+                if not is_sidebar:
+                    parent = elem.parent
+                    val_elem = parent.find_next(class_=re.compile(r'factValue|bodyMediumBold|value', re.I))
+                    if val_elem:
+                        val_text = val_elem.get_text(strip=True)
+                        if val_text and "verification" not in val_text.lower():
+                            fact_box[key] = val_text
+                            
     return fact_box
 
 def extract_drug_interactions(soup: BeautifulSoup) -> str:
@@ -339,30 +363,10 @@ def parse_html_to_json(html_content: str) -> Dict[str, Any]:
     fact_box = extract_fact_box(soup)
     faqs_data = extract_faqs(soup)
     
-    # Dynamic FAQ fallbacks for Missed Dose, Overdose, and Dosage
+    # Missed Dose, Overdose, and Dosage sections (no fallbacks to prevent hallucinated data)
     missed_dose_text = extract_section_text(soup, ["Missed Dose"])
-    if not missed_dose_text:
-        for faq in faqs_data:
-            q = faq.get("question", "").lower()
-            if "forget to take" in q or "forget a dose" in q or "missed dose" in q or "miss a dose" in q:
-                missed_dose_text = faq.get("answer", "")
-                break
-                
     overdose_text = extract_section_text(soup, ["Overdose"])
-    if not overdose_text:
-        for faq in faqs_data:
-            q = faq.get("question", "").lower()
-            if "take too much" in q or "overdose" in q or "accidental overdose" in q:
-                overdose_text = faq.get("answer", "")
-                break
-                
     dosage_text = extract_section_text(soup, ["Dosage"])
-    if not dosage_text:
-        for faq in faqs_data:
-            q = faq.get("question", "").lower()
-            if "how to take" in q or "how much" in q or "how many" in q or "dose of" in q:
-                dosage_text = faq.get("answer", "")
-                break
     
     structured_data = {
         "medicine_name": product_name,
@@ -379,7 +383,7 @@ def parse_html_to_json(html_content: str) -> Dict[str, Any]:
         "dosage": dosage_text,
         "overdose": overdose_text,
         "missed_dose": missed_dose_text,
-        "substitutes": extract_substitutes(soup),
+        "substitutes": [],
         "safety": formatted_safety,
         "quick_tips": extract_quick_tips(soup),
         "fact_box": fact_box,

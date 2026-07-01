@@ -7,6 +7,9 @@ interface SummaryData {
   overall_medical_accuracy_score: number;
   overall_completeness_score: number;
   overall_content_health_score: number;
+  overall_readability_score: number;
+  overall_seo_score: number;
+  overall_geo_score: number;
   total_issues: number;
   critical_issues: number;
   high_issues: number;
@@ -22,7 +25,9 @@ interface TrendPoint {
   timestamp: string;
   accuracy: number;
   completeness: number;
-  health: number;
+  readability: number;
+  seo: number;
+  geo: number;
 }
 
 interface IssueData {
@@ -77,21 +82,22 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
     const radius = 62;
     const strokeWidth = 6;
     const circumference = 2 * Math.PI * radius;
-    const offset = circumference - (score / 100) * circumference;
+    const safeScore = isNaN(score) ? 0 : Math.max(0, Math.min(100, score));
+    const offset = circumference - (safeScore / 100) * circumference;
 
     return (
-      <div className="glass-panel" style={{ padding: '24px', display: 'flex', flexDirection: 'column', alignItems: 'center', flex: '1', minWidth: '240px', backgroundColor: 'var(--bg-secondary)', border: '1px solid #dadce0', borderRadius: '8px' }}>
+      <div className="glass-panel" style={{ padding: '24px', display: 'flex', flexDirection: 'column', alignItems: 'center', flex: '1', minWidth: '200px', backgroundColor: 'var(--bg-secondary)', border: '1px solid #dadce0', borderRadius: '8px' }}>
         <div style={{ position: 'relative', width: '150px', height: '150px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
           <svg style={{ transform: 'rotate(-90deg)', width: '150px', height: '150px' }}>
             <circle cx="75" cy="75" r={radius} fill="transparent" stroke="#f1f3f4" strokeWidth={strokeWidth} />
             <circle cx="75" cy="75" r={radius} fill="transparent" stroke={color} strokeWidth={strokeWidth} strokeDasharray={circumference} strokeDashoffset={offset} strokeLinecap="round" style={{ transition: 'stroke-dashoffset 0.6s cubic-bezier(0.4, 0, 0.2, 1)' }} />
           </svg>
           <div style={{ position: 'absolute', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center' }}>
-            <span style={{ fontSize: '22px', fontWeight: '500', fontFamily: 'var(--font-display)', color: 'var(--text-primary)', lineHeight: '1.1' }}>{score}%</span>
+            <span style={{ fontSize: '20px', fontWeight: '500', fontFamily: 'var(--font-display)', color: 'var(--text-primary)', lineHeight: '1.1' }}>{score.toFixed(2)}%</span>
             <span style={{ fontSize: '11px', color: 'var(--text-secondary)', fontWeight: '400', marginTop: '4px' }}>{subtitle}</span>
           </div>
         </div>
-        <h3 style={{ marginTop: '20px', fontSize: '15px', fontWeight: '500', color: 'var(--text-primary)', fontFamily: 'var(--font-display)' }}>{title}</h3>
+        <h3 style={{ marginTop: '20px', fontSize: '14px', fontWeight: '500', color: 'var(--text-primary)', fontFamily: 'var(--font-display)', textAlign: 'center' }}>{title}</h3>
       </div>
     );
   };
@@ -118,51 +124,35 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
     // Build SVG path lines
     let accuracyPath = "";
     let completenessPath = "";
-    let healthPath = "";
+    let readabilityPath = "";
+    let seoPath = "";
+    let geoPath = "";
 
     trends.forEach((pt, idx) => {
       const x = getX(idx);
       const yAcc = getY(pt.accuracy);
       const yComp = getY(pt.completeness);
-      const yHealth = getY(pt.health);
+      const yRead = getY(pt.readability);
+      const ySeo = getY(pt.seo);
+      const yGeo = getY(pt.geo);
 
       if (idx === 0) {
         accuracyPath = `M ${x} ${yAcc}`;
         completenessPath = `M ${x} ${yComp}`;
-        healthPath = `M ${x} ${yHealth}`;
+        readabilityPath = `M ${x} ${yRead}`;
+        seoPath = `M ${x} ${ySeo}`;
+        geoPath = `M ${x} ${yGeo}`;
       } else {
         accuracyPath += ` L ${x} ${yAcc}`;
         completenessPath += ` L ${x} ${yComp}`;
-        healthPath += ` L ${x} ${yHealth}`;
+        readabilityPath += ` L ${x} ${yRead}`;
+        seoPath += ` L ${x} ${ySeo}`;
+        geoPath += ` L ${x} ${yGeo}`;
       }
     });
 
-    // Close the area paths under the line to construct shade regions
-    let healthAreaPath = "";
-    let completenessAreaPath = "";
-    if (pointsCount > 0) {
-      const firstX = getX(0);
-      const lastX = getX(pointsCount - 1);
-      const yBottom = height - padding;
-      
-      healthAreaPath = `${healthPath} L ${lastX} ${yBottom} L ${firstX} ${yBottom} Z`;
-      completenessAreaPath = `${completenessPath} L ${lastX} ${yBottom} L ${firstX} ${yBottom} Z`;
-    }
-
     return (
       <svg viewBox={`0 0 ${width} ${height}`} style={{ width: '100%', height: 'auto', maxHeight: '280px' }}>
-        {/* Define gradients for fill regions */}
-        <defs>
-          <linearGradient id="healthGrad" x1="0" y1="0" x2="0" y2="1">
-            <stop offset="0%" stopColor="var(--status-success)" stopOpacity="0.18" />
-            <stop offset="100%" stopColor="var(--status-success)" stopOpacity="0.0" />
-          </linearGradient>
-          <linearGradient id="completenessGrad" x1="0" y1="0" x2="0" y2="1">
-            <stop offset="0%" stopColor="var(--accent-purple)" stopOpacity="0.12" />
-            <stop offset="100%" stopColor="var(--accent-purple)" stopOpacity="0.0" />
-          </linearGradient>
-        </defs>
-
         {/* Y Axis gridlines */}
         {[0, 25, 50, 75, 100].map((gridVal) => {
           const y = getY(gridVal);
@@ -174,18 +164,19 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
           );
         })}
         
-        {/* Render Shaded Area Gradients underneath line strokes */}
-        {healthAreaPath && <path d={healthAreaPath} fill="url(#healthGrad)" />}
-        {completenessAreaPath && <path d={completenessAreaPath} fill="url(#completenessGrad)" />}
-        
         {/* Render path strokes */}
-        <path d={accuracyPath} fill="transparent" stroke="var(--accent-blue)" strokeWidth="2" strokeLinecap="round" />
-        <path d={completenessPath} fill="transparent" stroke="var(--accent-purple)" strokeWidth="2" strokeLinecap="round" />
-        <path d={healthPath} fill="transparent" stroke="var(--status-success)" strokeWidth="3" strokeLinecap="round" />
+        <path d={accuracyPath} fill="transparent" stroke="var(--accent-blue)" strokeWidth="2.5" strokeLinecap="round" />
+        <path d={completenessPath} fill="transparent" stroke="var(--accent-purple)" strokeWidth="2.5" strokeLinecap="round" />
+        <path d={readabilityPath} fill="transparent" stroke="var(--accent-pink)" strokeWidth="2.5" strokeLinecap="round" />
+        <path d={seoPath} fill="transparent" stroke="var(--status-warning)" strokeWidth="2.5" strokeLinecap="round" />
+        <path d={geoPath} fill="transparent" stroke="var(--status-success)" strokeWidth="2.5" strokeLinecap="round" />
         
-        {/* Render interactive coordinate nodes */}
+        {/* Render interactive coordinate nodes on active curves */}
         {trends.map((pt, idx) => (
-          <circle key={idx} cx={getX(idx)} cy={getY(pt.health)} r="3.5" fill="var(--status-success)" stroke="#ffffff" strokeWidth="1.5" />
+          <g key={idx}>
+            <circle cx={getX(idx)} cy={getY(pt.accuracy)} r="3" fill="var(--accent-blue)" stroke="#ffffff" strokeWidth="1" />
+            <circle cx={getX(idx)} cy={getY(pt.completeness)} r="3" fill="var(--accent-purple)" stroke="#ffffff" strokeWidth="1" />
+          </g>
         ))}
       </svg>
     );
@@ -261,9 +252,11 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
       
       {/* 1. Score Summary Row */}
       <div style={{ display: 'flex', flexWrap: 'wrap', gap: '24px' }}>
-        {renderScoreCircle(summary.overall_content_health_score, "Content Health Score", "Weighted", "var(--status-success)")}
-        {renderScoreCircle(summary.overall_medical_accuracy_score, "Medical Accuracy Score", "AI-Audited", "var(--accent-blue)")}
-        {renderScoreCircle(summary.overall_completeness_score, "Completeness Score", "Completeness", "var(--accent-purple)")}
+        {renderScoreCircle(summary.overall_medical_accuracy_score || 0.0, "Medical Accuracy Score", "AI-Audited", "var(--accent-blue)")}
+        {renderScoreCircle(summary.overall_completeness_score || 0.0, "Completeness Score", "Completeness", "var(--accent-purple)")}
+        {renderScoreCircle(summary.overall_readability_score || 0.0, "Readability Score", "Flesch Reading Ease", "var(--accent-pink)")}
+        {renderScoreCircle(summary.overall_seo_score || 0.0, "SEO Score", "Google SEO Rules", "var(--status-warning)")}
+        {renderScoreCircle(summary.overall_geo_score || 0.0, "GEO Score", "Geographical Accuracy", "var(--status-success)")}
       </div>
 
       {/* 2. Operational KPIs Row */}
@@ -336,10 +329,12 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
         <div className="glass-panel" style={{ padding: '24px', flex: '2', minWidth: '350px', backgroundColor: 'var(--bg-secondary)', border: '1px solid #dadce0' }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
             <h3 style={{ fontSize: '16px', fontWeight: '500', color: 'var(--text-primary)', fontFamily: 'var(--font-display)' }}>Governance Trend Analysis</h3>
-            <div style={{ display: 'flex', gap: '12px', fontSize: '11px' }}>
-              <span style={{ color: 'var(--status-success)' }}>● Health</span>
+            <div style={{ display: 'flex', gap: '12px', fontSize: '11px', flexWrap: 'wrap' }}>
               <span style={{ color: 'var(--accent-blue)' }}>● Accuracy</span>
               <span style={{ color: 'var(--accent-purple)' }}>● Completeness</span>
+              <span style={{ color: 'var(--accent-pink)' }}>● Readability</span>
+              <span style={{ color: 'var(--status-warning)' }}>● SEO</span>
+              <span style={{ color: 'var(--status-success)' }}>● GEO</span>
             </div>
           </div>
           {renderTrendChart()}

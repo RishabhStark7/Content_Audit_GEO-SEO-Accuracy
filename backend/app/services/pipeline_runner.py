@@ -184,6 +184,11 @@ def run_completeness_phase(db: Session, medicines: list, logger: PipelineLogger)
         logger.set_stats(count)
         
     logger.log("Phase 2 complete: Local Completeness Audited.")
+    try:
+        from backend.app.services.excel_exporter import export_activity_excel
+        export_activity_excel(db, "completeness")
+    except Exception as excel_err:
+        logger.log(f"Warning: Activity Excel export failed: {str(excel_err)}")
 
 def run_consumability_phase(db: Session, medicines: list, logger: PipelineLogger):
     logger.log("Starting Phase 3: Local Readability (Consumability) Audit...")
@@ -239,6 +244,11 @@ def run_consumability_phase(db: Session, medicines: list, logger: PipelineLogger
         logger.set_stats(count)
         
     logger.log("Phase 3 complete: Readability Consumability Audited.")
+    try:
+        from backend.app.services.excel_exporter import export_activity_excel
+        export_activity_excel(db, "readability")
+    except Exception as excel_err:
+        logger.log(f"Warning: Activity Excel export failed: {str(excel_err)}")
 
 def run_accuracy_phase(db: Session, medicines: list, logger: PipelineLogger):
     logger.log("Starting Phase 4: AI Medical Accuracy Audit...")
@@ -282,6 +292,11 @@ def run_accuracy_phase(db: Session, medicines: list, logger: PipelineLogger):
         logger.set_stats(count)
         
     logger.log("Phase 4 complete: AI Accuracy Audits complete.")
+    try:
+        from backend.app.services.excel_exporter import export_activity_excel
+        export_activity_excel(db, "accuracy")
+    except Exception as excel_err:
+        logger.log(f"Warning: Activity Excel export failed: {str(excel_err)}")
 
 def run_seo_prompts_phase(db: Session, medicines: list, logger: PipelineLogger):
     logger.log("Starting Phase 5: AI SEO & User Prompts Audit...")
@@ -346,6 +361,11 @@ def run_seo_prompts_phase(db: Session, medicines: list, logger: PipelineLogger):
         logger.set_stats(count)
         
     logger.log("Phase 5 complete: AI SEO & Prompts Audits complete.")
+    try:
+        from backend.app.services.excel_exporter import export_activity_excel
+        export_activity_excel(db, "seo")
+    except Exception as excel_err:
+        logger.log(f"Warning: Activity Excel export failed: {str(excel_err)}")
 
 def main():
     import argparse

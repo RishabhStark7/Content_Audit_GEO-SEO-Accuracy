@@ -21,10 +21,12 @@ def get_dashboard_summary(db: Session = Depends(get_db)):
     urls_audited = len(audited_records)
     
     # Calculate average scores
-    # Calculate average scores
-    avg_accuracy = 0.0
+    avg_accuracy = db.query(func.avg(AuditRecord.medical_accuracy_score)).filter(AuditRecord.status == "Audited").scalar() or 0.0
     avg_completeness = db.query(func.avg(AuditRecord.completeness_score)).filter(AuditRecord.status.in_(["Completeness_Checked", "Audited"])).scalar() or 0.0
     avg_health = db.query(func.avg(AuditRecord.content_health_score)).filter(AuditRecord.status.in_(["Completeness_Checked", "Audited"])).scalar() or 0.0
+    avg_readability = db.query(func.avg(AuditRecord.flesch_reading_ease)).filter(AuditRecord.flesch_reading_ease.isnot(None)).scalar() or 0.0
+    avg_seo = db.query(func.avg(AuditRecord.seo_score)).filter(AuditRecord.seo_score.isnot(None)).scalar() or 0.0
+    avg_geo = db.query(func.avg(AuditRecord.geo_score)).filter(AuditRecord.geo_score.isnot(None)).scalar() or 0.0
     
     # Issues count
     total_issues = db.query(Issue).count()
@@ -51,6 +53,9 @@ def get_dashboard_summary(db: Session = Depends(get_db)):
         "overall_medical_accuracy_score": avg_accuracy,
         "overall_completeness_score": round(avg_completeness, 2),
         "overall_content_health_score": round(avg_health, 2),
+        "overall_readability_score": round(avg_readability, 2),
+        "overall_seo_score": round(avg_seo, 2),
+        "overall_geo_score": round(avg_geo, 2),
         "total_issues": total_issues,
         "critical_issues": critical_issues,
         "high_issues": high_issues,
@@ -125,9 +130,11 @@ def get_trends_data(db: Session = Depends(get_db)):
         trends.append({
             "audit_id": r.id,
             "timestamp": r.scraped_at,
-            "accuracy": 0.0,
+            "accuracy": r.medical_accuracy_score or 0.0,
             "completeness": r.completeness_score or 0.0,
-            "health": r.content_health_score or 0.0
+            "readability": r.flesch_reading_ease or 0.0,
+            "seo": r.seo_score or 0.0,
+            "geo": r.geo_score or 0.0
         })
     return trends
 

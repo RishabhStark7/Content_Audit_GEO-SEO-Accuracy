@@ -265,7 +265,7 @@ export const MedicinesView: React.FC<MedicinesViewProps> = ({
                             {latestAudit.content_health_score}%
                           </span>
                           <span style={{ fontSize: '10px', color: 'var(--text-muted)' }}>
-                            Comp: {latestAudit.completeness_score}% | Accuracy: {latestAudit.medical_accuracy_score}%
+                            Comp: {latestAudit.completeness_score}% | Acc: {latestAudit.medical_accuracy_score}% | SEO: {latestAudit.seo_score || 0}% | GEO: {latestAudit.geo_score || 0}%
                           </span>
                         </div>
                       ) : latestAudit && latestAudit.completeness_score !== null ? (

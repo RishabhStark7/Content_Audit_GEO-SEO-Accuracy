@@ -87,6 +87,9 @@ class DashboardSummaryResponse(BaseModel):
     overall_medical_accuracy_score: float
     overall_completeness_score: float
     overall_content_health_score: float
+    overall_readability_score: float
+    overall_seo_score: float
+    overall_geo_score: float
     total_issues: int
     critical_issues: int
     high_issues: int

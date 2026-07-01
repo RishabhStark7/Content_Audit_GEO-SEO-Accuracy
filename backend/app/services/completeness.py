@@ -72,9 +72,33 @@ def run_completeness_validation(db: Session, audit_record: AuditRecord):
         val = fact_block.get(attr, "")
         presence_matrix[attr] = bool(val and len(str(val).strip()) > 0)
         
-    # Calculate completeness score based ONLY on mandatory attributes
-    present_mandatory_count = sum(1 for attr in MANDATORY_ATTRIBUTES if presence_matrix.get(attr, False))
-    completeness_score = (present_mandatory_count / len(MANDATORY_ATTRIBUTES)) * 100.0
+    # Dynamic mandatory attributes calculation based on specific compliance rules
+    generic_name = data.get("generic_name", "")
+    is_fdc = bool(generic_name and "+" in str(generic_name))
+    
+    local_mandatory = list(MANDATORY_ATTRIBUTES)
+    
+    # Rule 1 & 3: For FDCs (Fixed Dose Combinations), exclude chemical_class, action_class, and drug_interactions
+    if is_fdc:
+        if "chemical_class" in local_mandatory:
+            local_mandatory.remove("chemical_class")
+        if "action_class" in local_mandatory:
+            local_mandatory.remove("action_class")
+        if "drug_interactions" in local_mandatory:
+            local_mandatory.remove("drug_interactions")
+            
+    # Rule 2: For safety advice, only penalize if ALL 6 are missing. If at least one is present, exclude missing ones from scoring/penalization.
+    safety_attrs = ["alcohol", "pregnancy", "breastfeeding", "driving", "kidney", "liver"]
+    any_safety_present = any(presence_matrix.get(attr, False) for attr in safety_attrs)
+    if any_safety_present:
+        for attr in safety_attrs:
+            if not presence_matrix.get(attr, False):
+                if attr in local_mandatory:
+                    local_mandatory.remove(attr)
+                    
+    # Calculate completeness score based ONLY on local expected mandatory attributes
+    present_mandatory_count = sum(1 for attr in local_mandatory if presence_matrix.get(attr, False))
+    completeness_score = (present_mandatory_count / len(local_mandatory)) * 100.0 if local_mandatory else 100.0
     audit_record.completeness_score = round(completeness_score, 2)
     
     # Log missing attributes as issues under the simplified LCQ/MIS taxonomy
@@ -82,11 +106,8 @@ def run_completeness_validation(db: Session, audit_record: AuditRecord):
     # Clear any existing issues for this audit record to allow re-runs
     db.query(Issue).filter(Issue.audit_record_id == audit_record.id).delete()
     
-    for attr, present in presence_matrix.items():
-        # Do not flag missing optional elements as compliance issues
-        if attr in OPTIONAL_ATTRIBUTES:
-            continue
-            
+    for attr in local_mandatory:
+        present = presence_matrix.get(attr, False)
         if not present:
             # Map attribute to its corresponding category bucket
             bucket = "Core Medical Content"

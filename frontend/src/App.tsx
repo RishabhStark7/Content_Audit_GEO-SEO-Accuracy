@@ -14,6 +14,9 @@ const MOCK_SUMMARY = {
   overall_medical_accuracy_score: 87.5,
   overall_completeness_score: 91.2,
   overall_content_health_score: 89.0,
+  overall_readability_score: 65.4,
+  overall_seo_score: 82.0,
+  overall_geo_score: 89.5,
   total_issues: 4,
   critical_issues: 0,
   high_issues: 1,
@@ -33,10 +36,10 @@ const MOCK_HEATMAP = {
 };
 
 const MOCK_TRENDS = [
-  { audit_id: "1", timestamp: "2026-06-01", accuracy: 80, completeness: 85, health: 82 },
-  { audit_id: "2", timestamp: "2026-06-10", accuracy: 85, completeness: 90, health: 87 },
-  { audit_id: "3", timestamp: "2026-06-20", accuracy: 85, completeness: 90, health: 87 },
-  { audit_id: "4", timestamp: "2026-06-30", accuracy: 90, completeness: 95, health: 92 }
+  { audit_id: "1", timestamp: "2026-06-01", accuracy: 80, completeness: 85, readability: 60, seo: 80, geo: 85 },
+  { audit_id: "2", timestamp: "2026-06-10", accuracy: 85, completeness: 90, readability: 65, seo: 82, geo: 88 },
+  { audit_id: "3", timestamp: "2026-06-20", accuracy: 85, completeness: 90, readability: 65, seo: 82, geo: 88 },
+  { audit_id: "4", timestamp: "2026-06-30", accuracy: 90, completeness: 95, readability: 67, seo: 85, geo: 90 }
 ];
 
 const MOCK_MEDICINES = [

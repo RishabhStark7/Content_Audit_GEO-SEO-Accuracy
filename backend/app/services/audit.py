@@ -41,13 +41,6 @@ def call_gemini_audit_llm(drug_name: str, route: str, extracted_content: dict, r
         
     # Structural stub for actual LLM call:
     try:
-        # If API key is present, use HTTP Client to call Gemini API directly
-        # Prompts Gemini to compare extracted_content against references
-        # and output JSON list of issues in our taxonomy
-        # We can implement it using httpx
-        url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-pro:generateContent?key={settings.GEMINI_API_KEY}"
-        headers = {"Content-Type": "application/json"}
-        
         prompt = f"""
         You are a medical content auditor. Compare the following medicine catalog content against the provided regulatory references.
         Identify any inaccuracies, contradictions, low quality items, or missing warnings.
@@ -71,21 +64,9 @@ def call_gemini_audit_llm(drug_name: str, route: str, extracted_content: dict, r
         - evidence_text: string (direct quote from reference)
         """
         
-        payload = {
-            "contents": [{"parts": [{"text": prompt}]}],
-            "generationConfig": {"responseMimeType": "application/json"}
-        }
-        
-        with httpx.Client(timeout=30.0) as client:
-            resp = client.post(url, headers=headers, json=payload)
-            if resp.status_code == 200:
-                result = resp.json()
-                text = result['candidates'][0]['content']['parts'][0]['text']
-                # Parse JSON array from LLM response
-                return json.loads(text)
-            else:
-                raise Exception(f"Gemini API returned status {resp.status_code}: {resp.text}")
-                
+        from backend.app.services.llm_client import call_gemini
+        text = call_gemini("gemini-2.5-pro", prompt)
+        return json.loads(text)
     except Exception as e:
         print(f"[Audit Service] Error calling Gemini API: {str(e)}. Falling back to mock generator.")
         return generate_mock_audit_issues(drug_name, route, extracted_content)
@@ -210,17 +191,31 @@ def run_accuracy_audit(db: Session, audit_record: AuditRecord):
         )
         db.add(issue)
         
-    # 5. Update audit record scores & status
-    # Force medical accuracy score to 0.0 since we are not checking accuracy yet
-    audit_record.medical_accuracy_score = 0.0
+    # 5. Calculate Medical Accuracy Score dynamically
+    accuracy_score = 100.0
+    for finding in audit_findings:
+        if finding.get("issue_type") in ["INC", "CON", "LCQ"]:
+            severity = finding.get("severity", "Medium").capitalize()
+            if severity == "Critical":
+                accuracy_score -= 30.0
+            elif severity == "High":
+                accuracy_score -= 20.0
+            elif severity == "Medium":
+                accuracy_score -= 10.0
+            elif severity == "Low":
+                accuracy_score -= 5.0
+                
+    accuracy_score = max(0.0, min(100.0, accuracy_score))
+    audit_record.medical_accuracy_score = round(accuracy_score, 2)
     
     # Content Health Score is a weighted combination:
-    # 50% Completeness, 25% SEO score, 25% GEO score (ignoring accuracy for now)
+    # 40% Completeness, 30% Accuracy, 15% SEO score, 15% GEO score
     comp_score = audit_record.completeness_score or 0.0
+    acc_score = audit_record.medical_accuracy_score or 0.0
     seo_score = audit_record.seo_score or 0.0
     geo_score = audit_record.geo_score or 0.0
     
-    health_score = (0.50 * comp_score) + (0.25 * seo_score) + (0.25 * geo_score)
+    health_score = (0.40 * comp_score) + (0.30 * acc_score) + (0.15 * seo_score) + (0.15 * geo_score)
     audit_record.content_health_score = round(health_score, 2)
     
     audit_record.status = "Audited"
