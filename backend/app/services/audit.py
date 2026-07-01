@@ -18,17 +18,80 @@ REGULATORY_SOURCES = [
     "Government Treatment Guidelines"
 ]
 
-def get_regulatory_reference_mock(drug_name: str, source: str) -> str:
+def clean_generic_name(generic: str) -> str:
+    if not generic:
+        return "unknown"
+    return generic.split('(')[0].split('+')[0].split(',')[0].strip().lower()
+
+def get_regulatory_reference_mock(generic_raw: str, source: str) -> str:
     """ Mock helper returning regulatory text references for audit benchmark """
-    drug = drug_name.capitalize()
-    return (
-        f"Regulatory Document ({source}) for {drug}:\n"
-        f"Approved indications: Treatment of mild to moderate pain, fever. \n"
-        f"Recommended dosage: 500mg to 1000mg every 4 to 6 hours as needed. Do not exceed 4000mg in 24 hours.\n"
-        f"Contraindications: Severe hepatic impairment, active liver disease, hypersensitivity to {drug}.\n"
-        f"Warnings: Alcohol consumption increases risk of hepatotoxicity. Use with caution in patients with renal impairment.\n"
-        f"Side effects: Rare when used at recommended doses. Heavy overdose causes severe liver necrosis."
-    )
+    generic = clean_generic_name(generic_raw)
+    
+    if "paracetamol" in generic:
+        return (
+            f"Regulatory Document ({source}) for Paracetamol:\n"
+            f"Approved indications: Treatment of mild to moderate pain, fever.\n"
+            f"Recommended dosage: 500mg to 1000mg every 4 to 6 hours as needed. Do not exceed 4000mg in 24 hours.\n"
+            f"Contraindications: Severe hepatic impairment, active liver disease, hypersensitivity to paracetamol.\n"
+            f"Warnings: Alcohol consumption increases risk of hepatotoxicity. Use with caution in patients with renal impairment.\n"
+            f"Side effects: Rare when used at recommended doses. Heavy overdose causes severe liver necrosis."
+        )
+    elif "amoxicillin" in generic:
+        return (
+            f"Regulatory Document ({source}) for Amoxicillin:\n"
+            f"Approved indications: Treatment of susceptible bacterial infections including respiratory tract infections, otitis media, skin/soft tissue infections, and urinary tract infections.\n"
+            f"Recommended dosage: 250mg to 500mg every 8 hours or 500mg to 875mg every 12 hours.\n"
+            f"Contraindications: History of severe hypersensitivity reactions (e.g., anaphylaxis) to amoxicillin or other beta-lactams (penicillins, cephalosporins).\n"
+            f"Warnings: Serious and occasionally fatal hypersensitivity (anaphylactic) reactions have been reported.\n"
+            f"Side effects: Diarrhea, nausea, skin rash, vomiting."
+        )
+    elif "linezolid" in generic or "zolexid" in generic:
+        return (
+            f"Regulatory Document ({source}) for Linezolid:\n"
+            f"Approved indications: Treatment of nosocomial pneumonia, community-acquired pneumonia, complicated skin and skin structure infections, and vancomycin-resistant Enterococcus faecium infections.\n"
+            f"Recommended dosage: 600mg intravenously or orally every 12 hours for 10 to 14 days.\n"
+            f"Contraindications: Known hypersensitivity to linezolid. Do not use in patients taking monoamine oxidase inhibitors (MAOIs).\n"
+            f"Warnings: Myelosuppression (including anemia, leukopenia, pancytopenia, and thrombocytopenia) has been reported; monitor complete blood count weekly.\n"
+            f"Side effects: Diarrhea, headache, nausea, vomiting, thrombocytopenia."
+        )
+    elif "ibuprofen" in generic:
+        return (
+            f"Regulatory Document ({source}) for Ibuprofen:\n"
+            f"Approved indications: Relief of mild to moderate pain, primary dysmenorrhea, rheumatoid arthritis, osteoarthritis, and reduction of fever.\n"
+            f"Recommended dosage: 200mg to 400mg every 4 to 6 hours. Do not exceed 1200mg/day for over-the-counter use, or 3200mg/day for prescription use.\n"
+            f"Contraindications: Known hypersensitivity to ibuprofen or other NSAIDs. Contraindicated in the setting of CABG surgery.\n"
+            f"Warnings: NSAIDs cause an increased risk of serious cardiovascular thrombotic events, myocardial infarction, stroke, and serious gastrointestinal adverse events including bleeding, ulceration, and perforation.\n"
+            f"Side effects: Dyspepsia, abdominal pain, nausea, headache, dizziness."
+        )
+    elif "pantoprazole" in generic:
+        return (
+            f"Regulatory Document ({source}) for Pantoprazole:\n"
+            f"Approved indications: Short-term treatment of erosive esophagitis associated with GERD, maintenance of healing of erosive esophagitis, and pathological hypersecretory conditions including Zollinger-Ellison syndrome.\n"
+            f"Recommended dosage: 40mg once daily for up to 8 weeks.\n"
+            f"Contraindications: Known hypersensitivity to pantoprazole or other proton pump inhibitors (PPIs).\n"
+            f"Warnings: Acute tubulointerstitial nephritis has been observed. PPI therapy may be associated with an increased risk of Clostridium difficile-associated diarrhea.\n"
+            f"Side effects: Headache, diarrhea, nausea, abdominal pain, flatulence."
+        )
+    elif "atorvastatin" in generic:
+        return (
+            f"Regulatory Document ({source}) for Atorvastatin:\n"
+            f"Approved indications: Reduction of elevated total cholesterol, LDL-cholesterol, apolipoprotein B, and triglycerides in patients with primary hypercholesterolemia. Secondary prevention of cardiovascular disease.\n"
+            f"Recommended dosage: 10mg to 80mg once daily.\n"
+            f"Contraindications: Active liver disease or unexplained persistent elevations of serum transaminases. Pregnancy and lactation.\n"
+            f"Warnings: Myopathy and rhabdomyolysis have been reported. Monitor liver enzymes before initiating therapy.\n"
+            f"Side effects: Nasopharyngitis, arthralgia, diarrhea, pain in extremity, urinary tract infection."
+        )
+    else:
+        # Generic fallback
+        title = generic_raw.capitalize() if generic_raw else "Active Ingredient"
+        return (
+            f"Regulatory Document ({source}) for {title}:\n"
+            f"Approved indications: Treatment of conditions clinically indicated for {title}.\n"
+            f"Recommended dosage: As prescribed by a registered medical practitioner.\n"
+            f"Contraindications: Known hypersensitivity to {title}.\n"
+            f"Warnings: Use with caution. Consult doctor for safety guidelines.\n"
+            f"Side effects: Nausea, dizziness, mild allergic reaction."
+        )
 
 def call_gemini_audit_llm(drug_name: str, route: str, extracted_content: dict, references: List[str]) -> List[dict]:
     """ 
@@ -78,27 +141,45 @@ def generate_mock_audit_issues(drug_name: str, route: str, extracted_content: di
     """
     issues = []
     drug = drug_name.capitalize()
+    generic = clean_generic_name(extracted_content.get("generic_name", ""))
     
     # 1. Contradiction finding (CON)
     # If safety block text doesn't match the general description or uses
     uses_text = extracted_content.get("uses", "")
-    if "fever" in uses_text.lower():
-        issues.append({
-            "attribute": "Uses",
-            "content_bucket": "Core Medical Content",
-            "issue_type": "CON",
-            "root_cause": "Editorial Error",
-            "severity": "High",
-            "confidence": "High",
-            "regulatory_source": "CDSCO",
-            "regulatory_section": "Approved Indications",
-            "current_content": "Uses section mentions Dolo is strictly for COVID-19 related fever only.",
-            "suggested_content": "Dolo is indicated for general fever and pain relief, not restricted to COVID-19.",
-            "evidence_text": "Approved indications: Treatment of mild to moderate pain, fever."
-        })
-        
+    
+    if "paracetamol" in generic:
+        if uses_text and "fever" not in uses_text.lower():
+            issues.append({
+                "attribute": "Uses",
+                "content_bucket": "Core Medical Content",
+                "issue_type": "CON",
+                "root_cause": "Editorial Error",
+                "severity": "High",
+                "confidence": "High",
+                "regulatory_source": "CDSCO (Central Drugs Standard Control Organisation)",
+                "regulatory_section": "Approved Indications",
+                "current_content": "Uses section does not mention fever indication.",
+                "suggested_content": "Paracetamol is indicated for general fever and pain relief.",
+                "evidence_text": "Approved indications: Treatment of mild to moderate pain, fever."
+            })
+    elif "linezolid" in generic:
+        # Check if uses mentions severe bacterial infections
+        if uses_text and "bacterial" not in uses_text.lower():
+            issues.append({
+                "attribute": "Uses",
+                "content_bucket": "Core Medical Content",
+                "issue_type": "CON",
+                "root_cause": "Editorial Error",
+                "severity": "High",
+                "confidence": "High",
+                "regulatory_source": "CDSCO (Central Drugs Standard Control Organisation)",
+                "regulatory_section": "Approved Indications",
+                "current_content": "Uses section lacks severe bacterial infections indications.",
+                "suggested_content": "Linezolid is indicated for nosocomial pneumonia and complicated skin infections.",
+                "evidence_text": "Approved indications: Treatment of nosocomial pneumonia, community-acquired pneumonia, complicated skin and skin structure infections."
+            })
+    
     # 2. Low Content Quality finding (LCQ)
-    # If introduction or text is too short, or lacks context
     intro = extracted_content.get("product_introduction", "")
     if intro and len(intro) < 150:
         issues.append({
@@ -116,23 +197,51 @@ def generate_mock_audit_issues(drug_name: str, route: str, extracted_content: di
         })
         
     # 3. Incorrect Information finding (INC)
-    # Simulating a minor dosage discrepancy
     how_to_use = extracted_content.get("how_to_use", "")
     if how_to_use:
-        issues.append({
-            "attribute": "How to Use",
-            "content_bucket": "Core Medical Content",
-            "issue_type": "INC",
-            "root_cause": "Regulatory Update",
-            "severity": "Critical",
-            "confidence": "High",
-            "regulatory_source": "FDA",
-            "regulatory_section": "Dosage and Administration",
-            "current_content": "Maximum daily dosage is listed as 6 tablets (3900mg) without explicit liver warnings.",
-            "suggested_content": "Add warning: Do not exceed 4000mg of paracetamol in 24 hours. The risk of liver damage increases if exceeded.",
-            "evidence_text": "Do not exceed 4000mg in 24 hours. Heavy overdose causes severe liver necrosis."
-        })
-        
+        if "paracetamol" in generic:
+            issues.append({
+                "attribute": "How to Use",
+                "content_bucket": "Core Medical Content",
+                "issue_type": "INC",
+                "root_cause": "Regulatory Update",
+                "severity": "Critical",
+                "confidence": "High",
+                "regulatory_source": "FDA (US Food and Drug Administration)",
+                "regulatory_section": "Dosage and Administration",
+                "current_content": "Maximum daily dosage is listed without explicit hepatotoxicity warnings.",
+                "suggested_content": "Add warning: Do not exceed 4000mg of paracetamol in 24 hours. The risk of liver damage increases if exceeded.",
+                "evidence_text": "Do not exceed 4000mg in 24 hours. Heavy overdose causes severe liver necrosis."
+            })
+        elif "linezolid" in generic:
+            issues.append({
+                "attribute": "How to Use",
+                "content_bucket": "Core Medical Content",
+                "issue_type": "INC",
+                "root_cause": "Regulatory Update",
+                "severity": "Critical",
+                "confidence": "High",
+                "regulatory_source": "FDA (US Food and Drug Administration)",
+                "regulatory_section": "Dosage and Administration",
+                "current_content": "Maximum daily dosage is listed without myelosuppression warnings.",
+                "suggested_content": "Add warning: Monitor complete blood counts weekly due to myelosuppression risk during Linezolid therapy.",
+                "evidence_text": "Myelosuppression (including anemia, leukopenia, pancytopenia, and thrombocytopenia) has been reported; monitor complete blood count weekly."
+            })
+        elif "amoxicillin" in generic:
+            issues.append({
+                "attribute": "How to Use",
+                "content_bucket": "Core Medical Content",
+                "issue_type": "INC",
+                "root_cause": "Regulatory Update",
+                "severity": "Critical",
+                "confidence": "High",
+                "regulatory_source": "FDA (US Food and Drug Administration)",
+                "regulatory_section": "Dosage and Administration",
+                "current_content": "Maximum daily dosage is listed without anaphylaxis warnings.",
+                "suggested_content": "Add warning: Hypersensitivity reactions (anaphylaxis) have been reported.",
+                "evidence_text": "Serious and occasionally fatal hypersensitivity (anaphylactic) reactions have been reported."
+            })
+            
     return issues
 
 def run_accuracy_audit(db: Session, audit_record: AuditRecord):
