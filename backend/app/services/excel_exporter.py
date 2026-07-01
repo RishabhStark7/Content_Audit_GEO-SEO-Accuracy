@@ -344,6 +344,42 @@ def export_activity_excel(db: Session, activity: str):
             low_count = sum(1 for issue in accuracy_issues if issue.severity == "Low")
             info_count = sum(1 for issue in accuracy_issues if issue.severity == "Informational")
             
+            # Evaluate attribute wise accuracy
+            attr_status = {
+                "Uses": "Pass",
+                "Side Effects": "Pass",
+                "How to Use": "Pass",
+                "Alcohol Safety": "Pass",
+                "Pregnancy Safety": "Pass",
+                "Breastfeeding Safety": "Pass",
+                "Driving Safety": "Pass",
+                "Kidney Safety": "Pass",
+                "Liver Safety": "Pass"
+            }
+            
+            for issue in accuracy_issues:
+                issue_attr = (issue.attribute or "").strip().lower()
+                status_str = f"Fail ({get_friendly_issue_type(issue.issue_type)})"
+                
+                if "uses" in issue_attr:
+                    attr_status["Uses"] = status_str
+                elif "side effect" in issue_attr:
+                    attr_status["Side Effects"] = status_str
+                elif "how to use" in issue_attr or "dosage" in issue_attr:
+                    attr_status["How to Use"] = status_str
+                elif "alcohol" in issue_attr:
+                    attr_status["Alcohol Safety"] = status_str
+                elif "pregnancy" in issue_attr:
+                    attr_status["Pregnancy Safety"] = status_str
+                elif "breastfeeding" in issue_attr:
+                    attr_status["Breastfeeding Safety"] = status_str
+                elif "driving" in issue_attr:
+                    attr_status["Driving Safety"] = status_str
+                elif "kidney" in issue_attr:
+                    attr_status["Kidney Safety"] = status_str
+                elif "liver" in issue_attr:
+                    attr_status["Liver Safety"] = status_str
+            
             summary_rows.append({
                 "SKU ID": med.id,
                 "URL": med.url,
@@ -351,6 +387,15 @@ def export_activity_excel(db: Session, activity: str):
                 "Generic Name": med.generic_name or "Unknown",
                 "Medical Accuracy Score (%)": audit.medical_accuracy_score or 0.0,
                 "Status": audit.status or "Pending",
+                "Uses Accuracy": attr_status["Uses"],
+                "Side Effects Accuracy": attr_status["Side Effects"],
+                "How to Use Accuracy": attr_status["How to Use"],
+                "Alcohol Safety Accuracy": attr_status["Alcohol Safety"],
+                "Pregnancy Safety Accuracy": attr_status["Pregnancy Safety"],
+                "Breastfeeding Safety Accuracy": attr_status["Breastfeeding Safety"],
+                "Driving Safety Accuracy": attr_status["Driving Safety"],
+                "Kidney Safety Accuracy": attr_status["Kidney Safety"],
+                "Liver Safety Accuracy": attr_status["Liver Safety"],
                 "Total Issues": len(accuracy_issues),
                 "Critical Issues": critical_count,
                 "High Issues": high_count,
