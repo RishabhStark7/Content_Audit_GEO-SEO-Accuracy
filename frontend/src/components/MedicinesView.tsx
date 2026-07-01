@@ -221,7 +221,9 @@ export const MedicinesView: React.FC<MedicinesViewProps> = ({
                 const latestAudit = getLatestAudit(med.id);
                 return (
                   <tr key={med.id} style={{ borderBottom: '1px solid rgba(255, 255, 255, 0.05)', verticalAlign: 'middle' }}>
-                    <td style={{ padding: '16px 8px', color: 'var(--text-muted)' }}>#{med.id}</td>
+                    <td style={{ padding: '16px 8px', color: 'var(--text-muted)' }}>
+                      #{med.url ? (med.url.match(/[/-](\d+)$/) || [null, med.id])[1] : med.id}
+                    </td>
                     <td style={{ padding: '16px 8px' }}>
                       <div style={{ fontWeight: '600' }}>{med.name || "Extracting..."}</div>
                       <div style={{ fontSize: '11px', color: 'var(--text-muted)', marginTop: '2px', wordBreak: 'break-all', maxWidth: '280px' }}>

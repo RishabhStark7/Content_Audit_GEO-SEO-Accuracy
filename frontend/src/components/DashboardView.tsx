@@ -545,7 +545,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                       return (
                         <tr key={iss.id} style={{ borderBottom: '1px solid #dadce0' }}>
                           <td style={{ padding: '12px 10px', color: 'var(--text-secondary)' }}>
-                            {med.id}
+                            {med.url ? (med.url.match(/[/-](\d+)$/) || [null, med.id])[1] : med.id}
                           </td>
                           <td style={{ padding: '12px 10px', fontWeight: 'bold' }}>
                             {med.name}
