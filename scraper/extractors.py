@@ -11,6 +11,15 @@ def extract_product_name(soup: BeautifulSoup) -> str:
         return title.get_text(strip=True).split('-')[0].strip()
     return ""
 
+def extract_top_description(soup: BeautifulSoup) -> str:
+    desc_elem = soup.select_one('[class*="htmlWrapperDescription"]') or soup.select_one('[class*="PageTitle-module__htmlWrapperDescription"]')
+    if desc_elem:
+        text = desc_elem.get_text(strip=True)
+        if "Written By" in text:
+            text = text.split("Written By")[0].strip()
+        return text
+    return ""
+
 def extract_generic_name(soup: BeautifulSoup) -> str:
     # 1. Search for links containing '/generics/' first
     for a in soup.find_all('a'):
@@ -377,13 +386,17 @@ def parse_html_to_json(html_content: str) -> Dict[str, Any]:
     overdose_text = extract_section_text(soup, ["Overdose"])
     dosage_text = extract_section_text(soup, ["Dosage"])
     
+    top_desc = extract_top_description(soup)
+    product_intro = extract_section_text(soup, ["Product Introduction", "Introduction"]) or top_desc
+    product_sum = extract_section_text(soup, ["Product Summary", "Summary"]) or top_desc or product_intro
+    
     structured_data = {
         "medicine_name": product_name,
         "generic_name": generic_name,
         "dosage_form": dosage_form,
         "strength": strength,
-        "product_summary": extract_section_text(soup, ["Product Summary", "Summary"]),
-        "product_introduction": extract_section_text(soup, ["Product Introduction", "Introduction"]),
+        "product_summary": product_sum,
+        "product_introduction": product_intro,
         "uses": extract_section_text(soup, ["Uses of", "Uses", "What is it prescribed for?"]),
         "benefits": extract_section_text(soup, ["Benefits of", "Benefits", "Key Benefits"]),
         "side_effects": extract_side_effects(soup),
