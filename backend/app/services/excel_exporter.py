@@ -264,6 +264,25 @@ def export_activity_excel(db: Session, activity: str):
             
         audited_at_str = audit.scraped_at.strftime("%Y-%m-%d %H:%M:%S") if audit.scraped_at else ""
         
+        # Load generic name from json to prevent "Unknown" showing up
+        generic_name_display = med.generic_name
+        if audit.json_path:
+            json_abs_path = os.path.join(settings.DATA_DIR, audit.json_path)
+            if os.path.exists(json_abs_path):
+                try:
+                    with open(json_abs_path, "r", encoding="utf-8") as f:
+                        jdata = json.load(f)
+                        generic_name_display = jdata.get("generic_name", med.generic_name)
+                        # Sync it back to DB
+                        if generic_name_display and not med.generic_name:
+                            med.generic_name = generic_name_display
+                            db.commit()
+                except Exception as e:
+                    print(f"Error loading generic name from json: {e}")
+                    
+        if not generic_name_display:
+            generic_name_display = "Unknown"
+        
         if activity == "completeness":
             # Extract completeness findings
             # Get missing mandatory attributes from issues table
@@ -278,7 +297,7 @@ def export_activity_excel(db: Session, activity: str):
                 "SKU ID": med.id,
                 "URL": med.url,
                 "Product Name": med.name or "Unknown",
-                "Generic Name": med.generic_name or "Unknown",
+                "Generic Name": generic_name_display,
                 "Completeness Score (%)": audit.completeness_score or 0.0,
                 "Status": audit.status or "Pending",
                 "Missing Attributes Count": len(missing_attrs),
@@ -303,7 +322,7 @@ def export_activity_excel(db: Session, activity: str):
                 "SKU ID": med.id,
                 "URL": med.url,
                 "Product Name": med.name or "Unknown",
-                "Generic Name": med.generic_name or "Unknown",
+                "Generic Name": generic_name_display,
                 "Flesch Reading Ease": audit.flesch_reading_ease if audit.flesch_reading_ease is not None else "N/A",
                 "Flesch-Kincaid Grade Level": audit.flesch_kincaid_grade if audit.flesch_kincaid_grade is not None else "N/A",
                 "Status": audit.status or "Pending",
@@ -344,58 +363,89 @@ def export_activity_excel(db: Session, activity: str):
             low_count = sum(1 for issue in accuracy_issues if issue.severity == "Low")
             info_count = sum(1 for issue in accuracy_issues if issue.severity == "Informational")
             
-            # Evaluate attribute wise accuracy
-            attr_status = {
-                "Uses": "Pass",
-                "Side Effects": "Pass",
-                "How to Use": "Pass",
-                "Alcohol Safety": "Pass",
-                "Pregnancy Safety": "Pass",
-                "Breastfeeding Safety": "Pass",
-                "Driving Safety": "Pass",
-                "Kidney Safety": "Pass",
-                "Liver Safety": "Pass"
+            # Evaluate attribute wise accuracy for all 24 attributes
+            all_attrs = [
+                "product_introduction", "uses", "benefits", "side_effects", 
+                "how_to_use", "how_it_works", "alcohol", "pregnancy", 
+                "breastfeeding", "driving", "kidney", "liver", "quick_tips", 
+                "chemical_class", "therapeutic_class", "habit_forming", 
+                "action_class", "drug_interactions", "faqs",
+                "product_summary", "dosage", "overdose", "missed_dose", "substitutes"
+            ]
+            
+            # Map of attribute matching patterns
+            attr_mapping = {
+                "product_introduction": ["product introduction", "introduction", "intro"],
+                "uses": ["uses", "indication", "approved indications"],
+                "benefits": ["benefits"],
+                "side_effects": ["side effects", "adverse events", "adverse"],
+                "how_to_use": ["how to use", "administration"],
+                "how_it_works": ["how it works", "mechanism"],
+                "alcohol": ["alcohol"],
+                "pregnancy": ["pregnancy"],
+                "breastfeeding": ["breastfeeding"],
+                "driving": ["driving"],
+                "kidney": ["kidney"],
+                "liver": ["liver"],
+                "quick_tips": ["quick tips", "tips"],
+                "chemical_class": ["chemical class"],
+                "therapeutic_class": ["therapeutic class"],
+                "habit_forming": ["habit forming"],
+                "action_class": ["action class"],
+                "drug_interactions": ["drug interactions", "interactions"],
+                "faqs": ["faqs", "faq"],
+                "product_summary": ["product summary", "summary"],
+                "dosage": ["dosage", "dose"],
+                "overdose": ["overdose"],
+                "missed_dose": ["missed dose"],
+                "substitutes": ["substitutes", "alternative brands", "alternatives"]
             }
+            
+            attr_status = {a: "Pass" for a in all_attrs}
             
             for issue in accuracy_issues:
                 issue_attr = (issue.attribute or "").strip().lower()
-                status_str = f"Fail ({get_friendly_issue_type(issue.issue_type)})"
+                status_str = issue.suggested_content or issue.reviewer_comments or f"Fail ({get_friendly_issue_type(issue.issue_type)})"
                 
-                if "uses" in issue_attr:
-                    attr_status["Uses"] = status_str
-                elif "side effect" in issue_attr:
-                    attr_status["Side Effects"] = status_str
-                elif "how to use" in issue_attr or "dosage" in issue_attr:
-                    attr_status["How to Use"] = status_str
-                elif "alcohol" in issue_attr:
-                    attr_status["Alcohol Safety"] = status_str
-                elif "pregnancy" in issue_attr:
-                    attr_status["Pregnancy Safety"] = status_str
-                elif "breastfeeding" in issue_attr:
-                    attr_status["Breastfeeding Safety"] = status_str
-                elif "driving" in issue_attr:
-                    attr_status["Driving Safety"] = status_str
-                elif "kidney" in issue_attr:
-                    attr_status["Kidney Safety"] = status_str
-                elif "liver" in issue_attr:
-                    attr_status["Liver Safety"] = status_str
+                # Find matching attribute
+                matched = False
+                for a_key, patterns in attr_mapping.items():
+                    if any(p in issue_attr for p in patterns):
+                        attr_status[a_key] = status_str
+                        matched = True
+                        break
             
             summary_rows.append({
                 "SKU ID": med.id,
                 "URL": med.url,
                 "Product Name": med.name or "Unknown",
-                "Generic Name": med.generic_name or "Unknown",
+                "Generic Name": generic_name_display,
                 "Medical Accuracy Score (%)": audit.medical_accuracy_score or 0.0,
                 "Status": audit.status or "Pending",
-                "Uses Accuracy": attr_status["Uses"],
-                "Side Effects Accuracy": attr_status["Side Effects"],
-                "How to Use Accuracy": attr_status["How to Use"],
-                "Alcohol Safety Accuracy": attr_status["Alcohol Safety"],
-                "Pregnancy Safety Accuracy": attr_status["Pregnancy Safety"],
-                "Breastfeeding Safety Accuracy": attr_status["Breastfeeding Safety"],
-                "Driving Safety Accuracy": attr_status["Driving Safety"],
-                "Kidney Safety Accuracy": attr_status["Kidney Safety"],
-                "Liver Safety Accuracy": attr_status["Liver Safety"],
+                "Product Introduction Accuracy": attr_status["product_introduction"],
+                "Uses Accuracy": attr_status["uses"],
+                "Benefits Accuracy": attr_status["benefits"],
+                "Side Effects Accuracy": attr_status["side_effects"],
+                "How to Use Accuracy": attr_status["how_to_use"],
+                "How It Works Accuracy": attr_status["how_it_works"],
+                "Alcohol Safety Accuracy": attr_status["alcohol"],
+                "Pregnancy Safety Accuracy": attr_status["pregnancy"],
+                "Breastfeeding Safety Accuracy": attr_status["breastfeeding"],
+                "Driving Safety Accuracy": attr_status["driving"],
+                "Kidney Safety Accuracy": attr_status["kidney"],
+                "Liver Safety Accuracy": attr_status["liver"],
+                "Quick Tips Accuracy": attr_status["quick_tips"],
+                "Chemical Class Accuracy": attr_status["chemical_class"],
+                "Therapeutic Class Accuracy": attr_status["therapeutic_class"],
+                "Habit Forming Accuracy": attr_status["habit_forming"],
+                "Action Class Accuracy": attr_status["action_class"],
+                "Drug Interactions Accuracy": attr_status["drug_interactions"],
+                "FAQs Accuracy": attr_status["faqs"],
+                "Product Summary Accuracy": attr_status["product_summary"],
+                "Dosage Accuracy": attr_status["dosage"],
+                "Overdose Accuracy": attr_status["overdose"],
+                "Missed Dose Accuracy": attr_status["missed_dose"],
+                "Substitutes Accuracy": attr_status["substitutes"],
                 "Total Issues": len(accuracy_issues),
                 "Critical Issues": critical_count,
                 "High Issues": high_count,
@@ -444,7 +494,7 @@ def export_activity_excel(db: Session, activity: str):
                 "SKU ID": med.id,
                 "URL": med.url,
                 "Product Name": med.name or "Unknown",
-                "Generic Name": med.generic_name or "Unknown",
+                "Generic Name": generic_name_display,
                 "SEO Score (%)": audit.seo_score or 0.0,
                 "GEO Score (%)": audit.geo_score or 0.0,
                 "Status": audit.status or "Pending",

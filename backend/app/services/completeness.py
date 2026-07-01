@@ -74,6 +74,8 @@ def run_completeness_validation(db: Session, audit_record: AuditRecord):
         
     # Dynamic mandatory attributes calculation based on specific compliance rules
     generic_name = data.get("generic_name", "")
+    if generic_name and audit_record.medicine:
+        audit_record.medicine.generic_name = generic_name
     is_fdc = bool(generic_name and "+" in str(generic_name))
     
     local_mandatory = list(MANDATORY_ATTRIBUTES)
