@@ -39,6 +39,7 @@ interface IssueData {
   severity: string; // "Critical", "High", "Medium", "Low"
   suggested_content: string | null;
   reviewer_status: string;
+  regulatory_source?: string | null;
 }
 
 interface MedicineData {
@@ -196,6 +197,17 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
     if (!audit) return { id: 0, name: "Unknown SKU", url: "" };
     const med = medicines.find(m => m.id === audit.medicine_id);
     return med || { id: audit.medicine_id, name: `SKU #${audit.medicine_id}`, url: "" };
+  };
+
+  // Helper to map regulatory source to a web link
+  const getReferenceUrl = (source: string) => {
+    if (!source) return '#';
+    const src = source.toLowerCase();
+    if (src.includes('cdsco')) return 'https://cdscoonline.gov.in/';
+    if (src.includes('fda')) return 'https://www.accessdata.fda.gov/scripts/cder/daf/';
+    if (src.includes('ema')) return 'https://www.ema.europa.eu/en/medicines';
+    if (src.includes('mhra')) return 'https://www.gov.uk/government/organisations/medicines-and-healthcare-products-regulatory-agency';
+    return `https://www.google.com/search?q=${encodeURIComponent(source + " regulatory approval drugs")}`;
   };
 
   // Filter issues for active category modal
@@ -521,6 +533,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                       <th style={{ padding: '10px' }}>Attribute Checked</th>
                       <th style={{ padding: '10px' }}>Severity</th>
                       <th style={{ padding: '10px' }}>Compliance Domain</th>
+                      <th style={{ padding: '10px' }}>Benchmark Reference</th>
                       <th style={{ padding: '10px' }}>Suggested Correction</th>
                     </tr>
                   </thead>
@@ -591,6 +604,22 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                             }}>
                               {iss.issue_type === 'MIS' ? 'Completeness' : 'Accuracy/Quality'}
                             </span>
+                          </td>
+                          <td style={{ padding: '12px 10px' }}>
+                            {iss.issue_type !== 'MIS' && iss.regulatory_source ? (
+                              <a 
+                                href={getReferenceUrl(iss.regulatory_source)} 
+                                target="_blank" 
+                                rel="noreferrer" 
+                                style={{ 
+                                  color: 'var(--accent-purple)', 
+                                  textDecoration: 'none',
+                                  fontWeight: '500'
+                                }}
+                              >
+                                {iss.regulatory_source}
+                              </a>
+                            ) : 'N/A'}
                           </td>
                           <td style={{ padding: '12px 10px', color: 'var(--text-secondary)', fontStyle: 'italic' }}>
                             {iss.suggested_content || 'N/A'}
