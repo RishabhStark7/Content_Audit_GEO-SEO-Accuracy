@@ -409,8 +409,8 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
           <div style={{
             backgroundColor: '#ffffff',
             borderRadius: '8px',
-            width: '90%',
-            maxWidth: '850px',
+            width: '95%',
+            maxWidth: '1100px',
             maxHeight: '85vh',
             padding: '24px',
             display: 'flex',
@@ -512,10 +512,12 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                   No active compliance tickets found matching your filter criteria.
                 </div>
               ) : (
-                <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '13px' }}>
+                 <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '13px' }}>
                   <thead>
                     <tr style={{ borderBottom: '2px solid #dadce0', textAlign: 'left', color: 'var(--text-secondary)' }}>
+                      <th style={{ padding: '10px' }}>SKU ID</th>
                       <th style={{ padding: '10px' }}>SKU Name</th>
+                      <th style={{ padding: '10px' }}>SKU URL</th>
                       <th style={{ padding: '10px' }}>Attribute Checked</th>
                       <th style={{ padding: '10px' }}>Severity</th>
                       <th style={{ padding: '10px' }}>Compliance Domain</th>
@@ -542,8 +544,27 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
 
                       return (
                         <tr key={iss.id} style={{ borderBottom: '1px solid #dadce0' }}>
+                          <td style={{ padding: '12px 10px', color: 'var(--text-secondary)' }}>
+                            {med.id}
+                          </td>
                           <td style={{ padding: '12px 10px', fontWeight: 'bold' }}>
                             {med.name}
+                          </td>
+                          <td style={{ padding: '12px 10px' }}>
+                            {med.url ? (
+                              <a 
+                                href={med.url} 
+                                target="_blank" 
+                                rel="noreferrer" 
+                                style={{ 
+                                  color: 'var(--accent-blue)', 
+                                  textDecoration: 'none',
+                                  fontWeight: '500'
+                                }}
+                              >
+                                Link
+                              </a>
+                            ) : 'N/A'}
                           </td>
                           <td style={{ padding: '12px 10px' }}>{iss.attribute}</td>
                           <td style={{ padding: '12px 10px' }}>
