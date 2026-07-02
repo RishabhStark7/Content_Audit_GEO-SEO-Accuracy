@@ -182,6 +182,24 @@ function App() {
     }
   };
 
+  const handleTriggerProcess = async (processType: string) => {
+    setLoading(true);
+    try {
+      const res = await fetch(`${API_BASE}/dashboard/run-process?process_type=${processType}`, {
+        method: "POST"
+      });
+      if (res.ok) {
+        await loadData();
+      } else {
+        throw new Error(await res.text());
+      }
+    } catch (err: any) {
+      alert(`Triggering process failed: ${err.message}`);
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const handleUpdateIssue = async (
     issueId: string, 
     status: string, 
@@ -362,6 +380,7 @@ function App() {
             issues={issues}
             medicines={medicines}
             audits={audits}
+            onTriggerProcess={handleTriggerProcess}
           />
         )}
         {activeTab === "MEDICINES" && (

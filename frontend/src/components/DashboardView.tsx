@@ -62,6 +62,7 @@ interface DashboardViewProps {
   issues: IssueData[];
   medicines: MedicineData[];
   audits: AuditData[];
+  onTriggerProcess?: (processType: string) => Promise<void>;
 }
 
 export const DashboardView: React.FC<DashboardViewProps> = ({ 
@@ -70,7 +71,8 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
   trends,
   issues,
   medicines,
-  audits
+  audits,
+  onTriggerProcess
 }) => {
   // Modal State
   const [selectedBucket, setSelectedBucket] = useState<string | null>(null);
@@ -262,6 +264,113 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
       
+      {/* Operations Control Panel */}
+      <div className="glass-panel" style={{
+        padding: '24px',
+        backgroundColor: 'var(--bg-secondary)',
+        border: '1px solid #dadce0',
+        borderRadius: '8px',
+        display: 'flex',
+        flexDirection: 'column',
+        gap: '16px'
+      }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '12px' }}>
+          <div>
+            <h3 style={{ fontSize: '16px', fontWeight: '500', color: 'var(--text-primary)', margin: 0, fontFamily: 'var(--font-display)' }}>
+              Batch Content Governance Operations
+            </h3>
+            <p style={{ fontSize: '12px', color: 'var(--text-secondary)', margin: '4px 0 0 0' }}>
+              Initiate medical governance audit processes for all SKU URLs in the input Excel sheet.
+            </p>
+          </div>
+          <span style={{ fontSize: '11px', color: 'var(--text-muted)', backgroundColor: 'rgba(0,0,0,0.04)', padding: '4px 10px', borderRadius: '4px' }}>
+            Source: data/input.xlsx
+          </span>
+        </div>
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '12px' }}>
+          <button
+            onClick={() => onTriggerProcess?.('completeness')}
+            style={{
+              padding: '10px 18px',
+              backgroundColor: 'var(--accent-purple)',
+              color: '#ffffff',
+              border: 'none',
+              borderRadius: '6px',
+              fontSize: '12px',
+              fontWeight: '500',
+              cursor: 'pointer',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '8px',
+              transition: 'all 0.2s ease',
+              boxShadow: '0 2px 4px rgba(138, 43, 226, 0.15)'
+            }}
+          >
+            <span>📊</span> Run Completeness Audit
+          </button>
+          <button
+            onClick={() => onTriggerProcess?.('accuracy')}
+            style={{
+              padding: '10px 18px',
+              backgroundColor: 'var(--accent-blue)',
+              color: '#ffffff',
+              border: 'none',
+              borderRadius: '6px',
+              fontSize: '12px',
+              fontWeight: '500',
+              cursor: 'pointer',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '8px',
+              transition: 'all 0.2s ease',
+              boxShadow: '0 2px 4px rgba(0, 113, 227, 0.15)'
+            }}
+          >
+            <span>🎯</span> Run Medical Accuracy Audit
+          </button>
+          <button
+            onClick={() => onTriggerProcess?.('consumability')}
+            style={{
+              padding: '10px 18px',
+              backgroundColor: 'var(--accent-pink)',
+              color: '#ffffff',
+              border: 'none',
+              borderRadius: '6px',
+              fontSize: '12px',
+              fontWeight: '500',
+              cursor: 'pointer',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '8px',
+              transition: 'all 0.2s ease',
+              boxShadow: '0 2px 4px rgba(255, 45, 85, 0.15)'
+            }}
+          >
+            <span>📖</span> Run Readability Scorer
+          </button>
+          <button
+            onClick={() => onTriggerProcess?.('seo')}
+            style={{
+              padding: '10px 18px',
+              backgroundColor: 'var(--status-warning)',
+              color: '#ffffff',
+              border: 'none',
+              borderRadius: '6px',
+              fontSize: '12px',
+              fontWeight: '500',
+              cursor: 'pointer',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '8px',
+              transition: 'all 0.2s ease',
+              boxShadow: '0 2px 4px rgba(242, 153, 74, 0.15)'
+            }}
+          >
+            <span>🚀</span> Run SEO & GEO Audit
+          </button>
+        </div>
+      </div>
+
       {/* 1. Score Summary Row */}
       <div style={{ display: 'flex', flexWrap: 'wrap', gap: '24px' }}>
         {renderScoreCircle(summary.overall_medical_accuracy_score || 0.0, "Medical Accuracy Score", "AI-Audited", "var(--accent-blue)")}

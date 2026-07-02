@@ -1,5 +1,5 @@
 import datetime
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, BackgroundTasks
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 from typing import List, Optional
@@ -156,4 +156,77 @@ def get_progress():
         "estimated_time_remaining": "0s",
         "last_updated": ""
     }
+
+@router.post("/run-process")
+def run_process(process_type: str, background_tasks: BackgroundTasks, db: Session = Depends(get_db)):
+    """ Triggers completeness, accuracy, consumability, or seo audits asynchronously """
+    if process_type not in ["completeness", "accuracy", "consumability", "seo"]:
+        raise HTTPException(status_code=400, detail="Invalid process type")
+        
+    from backend.app.models.database import SessionLocal
+    from backend.app.services.pipeline_runner import (
+        run_completeness_phase,
+        run_consumability_phase,
+        run_accuracy_phase,
+        run_seo_prompts_phase,
+        PipelineLogger
+    )
+    import os
+    import pandas as pd
+    
+    # Check if input file exists
+    catalog_path = "E:/Content-Governance/data/input.xlsx"
+    if not os.path.exists(catalog_path):
+        raise HTTPException(status_code=404, detail="Input Excel sheet not found")
+        
+    def run_job():
+        db_session = SessionLocal()
+        try:
+            # Sync catalog Excel rows to Medicine table
+            if catalog_path.endswith('.xlsx'):
+                try:
+                    df = pd.read_excel(catalog_path)
+                except Exception:
+                    df = pd.read_csv(catalog_path, sep='\t')
+            else:
+                df = pd.read_csv(catalog_path)
+                
+            url_col = "URLs" if "URLs" in df.columns else ("SKU URLs" if "SKU URLs" in df.columns else df.columns[0])
+            
+            medicines = []
+            for idx, row in df.iterrows():
+                url = row[url_col]
+                if bool(pd.isna(url)):
+                    continue
+                url = str(url).strip()
+                med = db_session.query(Medicine).filter(Medicine.url == url).first()
+                if not med:
+                    med = Medicine(url=url)
+                    db_session.add(med)
+                    db_session.commit()
+                    db_session.refresh(med)
+                medicines.append(med)
+                
+            total_skus = len(medicines)
+            logger = PipelineLogger(db_session, process_type.capitalize(), total_skus)
+            
+            if process_type == "completeness":
+                run_completeness_phase(db_session, medicines, logger)
+            elif process_type == "accuracy":
+                run_accuracy_phase(db_session, medicines, logger)
+            elif process_type == "consumability":
+                run_consumability_phase(db_session, medicines, logger)
+            elif process_type == "seo":
+                run_seo_prompts_phase(db_session, medicines, logger)
+                
+            from backend.app.services.excel_exporter import update_scraped_content_excel
+            update_scraped_content_excel(db_session)
+        except Exception as err:
+            print(f"[Async Job] Error: {str(err)}")
+        finally:
+            db_session.close()
+            
+    background_tasks.add_task(run_job)
+    return {"message": f"Successfully triggered {process_type} process in the background."}
+
 
