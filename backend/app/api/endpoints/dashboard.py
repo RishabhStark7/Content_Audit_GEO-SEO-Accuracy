@@ -228,7 +228,7 @@ def run_process(process_type: str, background_tasks: BackgroundTasks, db: Sessio
                     ).order_by(AuditRecord.scraped_at.desc()).first()
                     
                     if not audit:
-                        audit = AuditRecord(medicine_id=med.id, status="Pending", json_path=f"archive/scraped_{med.id}.json")
+                        audit = AuditRecord(medicine_id=med.id, status="Pending", json_path=f"archive/{med.id}/structured.json")
                         db_session.add(audit)
                         db_session.commit()
                         db_session.refresh(audit)
@@ -246,7 +246,7 @@ def run_process(process_type: str, background_tasks: BackgroundTasks, db: Sessio
                 export_db = SessionLocal()
                 try:
                     from backend.app.services.excel_exporter import export_activity_excel
-                    export_activity_excel(export_db, "accuracy")
+                    export_activity_excel(export_db, "indepth_accuracy")
                     from backend.app.services.excel_exporter import update_scraped_content_excel
                     update_scraped_content_excel(export_db)
                 finally:

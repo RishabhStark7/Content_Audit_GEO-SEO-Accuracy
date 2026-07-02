@@ -45,9 +45,9 @@ def run_scraper_task(db_session_factory, url: str, medicine_id: int, version_id:
         print(f"[Backend Subprocess] Scraper finished successfully: {process.stdout}")
         
         # Locate the output file meta.json or structured.json
-        from scraper.scraper import get_medicine_slug_from_url
-        slug = get_medicine_slug_from_url(url)
-        record_dir = os.path.join(settings.ARCHIVE_DIR, version_id, slug)
+        from scraper.scraper import get_sku_id_from_url
+        sku_id = get_sku_id_from_url(url)
+        record_dir = os.path.join(settings.ARCHIVE_DIR, sku_id)
         meta_file = os.path.join(record_dir, "meta.json")
         
         if not os.path.exists(meta_file):

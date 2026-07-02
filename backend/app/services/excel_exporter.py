@@ -350,7 +350,7 @@ def export_activity_excel(db: Session, activity: str):
                     "Severity": "Medium"
                 })
                 
-        elif activity == "accuracy":
+        elif activity in ["accuracy", "indepth_accuracy"]:
             # Extract accuracy findings
             accuracy_issues = db.query(Issue).filter(
                 Issue.audit_record_id == audit.id,

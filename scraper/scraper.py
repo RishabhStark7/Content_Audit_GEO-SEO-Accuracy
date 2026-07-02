@@ -30,6 +30,17 @@ def get_medicine_slug_from_url(url: str) -> str:
         return last
     return "medicine-" + str(uuid.uuid4())[:8]
 
+def get_sku_id_from_url(url: str) -> str:
+    """ Extracts the SKU ID from URL or slug """
+    slug = get_medicine_slug_from_url(url)
+    match = re.search(r'-(\d+)$', slug)
+    if match:
+        return match.group(1)
+    matches = re.findall(r'\d+', slug)
+    if matches:
+        return matches[-1]
+    return slug
+
 def expand_sections(page) -> None:
     """ Automatically expand all 'Read More', 'Show More', and FAQ accordion sections """
     print("[Scraper] Expanding all dynamic sections...")
@@ -90,8 +101,8 @@ def scrape_medicine(url: str, version_id: str = None) -> dict:
     if not version_id:
         version_id = datetime.datetime.now().strftime("%Y%m%d-%H%M%S")
         
-    slug = get_medicine_slug_from_url(url)
-    output_dir = ARCHIVE_DIR / version_id / slug
+    sku_id = get_sku_id_from_url(url)
+    output_dir = ARCHIVE_DIR / sku_id
     output_dir.mkdir(parents=True, exist_ok=True)
     
     print(f"[Scraper] Starting scrape for URL: {url}")
