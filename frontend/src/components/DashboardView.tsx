@@ -368,6 +368,26 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
           >
             <span>🚀</span> Run SEO & GEO Audit
           </button>
+          <button
+            onClick={() => onTriggerProcess?.('indepth')}
+            style={{
+              padding: '10px 18px',
+              backgroundColor: '#d93025',
+              color: '#ffffff',
+              border: 'none',
+              borderRadius: '6px',
+              fontSize: '12px',
+              fontWeight: '500',
+              cursor: 'pointer',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '8px',
+              transition: 'all 0.2s ease',
+              boxShadow: '0 2px 4px rgba(217, 48, 37, 0.15)'
+            }}
+          >
+            <span>🔍</span> Run In-depth Audit
+          </button>
         </div>
       </div>
 

@@ -354,7 +354,7 @@ def export_activity_excel(db: Session, activity: str):
             # Extract accuracy findings
             accuracy_issues = db.query(Issue).filter(
                 Issue.audit_record_id == audit.id,
-                Issue.issue_type != "MIS"
+                (Issue.issue_type != "MIS") | (Issue.reviewer_comments.like("%Audit%")) | (Issue.reviewer_comments.like("%AI%"))
             ).all()
             
             critical_count = sum(1 for issue in accuracy_issues if issue.severity == "Critical")

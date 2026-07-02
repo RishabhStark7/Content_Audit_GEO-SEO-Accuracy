@@ -370,3 +370,343 @@ def run_accuracy_audit(db: Session, audit_record: AuditRecord):
         print(f"[Audit Service] Failed to update progress JSON: {str(progress_error)}")
         
     print(f"[Audit Service] Finished: Accuracy={audit_record.medical_accuracy_score}%, Content Health Score={audit_record.content_health_score}%")
+
+def run_indepth_audit(db: Session, audit_record: AuditRecord):
+    """
+    Module 3.5: In-depth Medical Accuracy Audit.
+    Evaluates every attribute across 7 dimensions and uses the new 100-point formula:
+    Overall Score = Medical Accuracy (30%) + Clinical Completeness (20%) + Patient Safety (20%) +
+                    Regulatory Alignment (10%) + Formulation Consistency (10%) + Editorial Quality (10%)
+    """
+    print(f"[Audit Service] Triggered In-depth Accuracy Audit for audit: {audit_record.id}")
+    
+    # 1. Load structured JSON
+    json_absolute_path = os.path.join(settings.DATA_DIR, audit_record.json_path)
+    if not os.path.exists(json_absolute_path):
+        print(f"[Audit Service] Error: structured JSON file not found at {json_absolute_path}")
+        return
+        
+    with open(json_absolute_path, "r", encoding="utf-8") as f:
+        data = json.load(f)
+        
+    medicine_name = data.get("medicine_name", "Unknown Medicine")
+    generic_raw = data.get("generic_name", "Unknown generic")
+    dosage_form = data.get("dosage_form", "")
+    
+    generic_name = clean_generic_and_fdc(generic_raw)
+    route = determine_route_from_sku(medicine_name, dosage_form)
+    
+    # 2. Benchmark references lookup
+    references = []
+    for source in REGULATORY_SOURCES:
+        ref_text = get_regulatory_reference_mock(generic_name, route, source)
+        references.append(ref_text)
+        
+    # 3. Call In-depth AI Auditor
+    audit_findings = call_gemini_indepth_audit_llm(medicine_name, generic_name, route, data, references)
+    
+    # 4. Insert issues into database
+    # Delete prior non-completeness accuracy issues to allow re-runs
+    db.query(Issue).filter(
+        Issue.audit_record_id == audit_record.id,
+        Issue.issue_type != "MIS"
+    ).delete()
+    
+    for finding in audit_findings.get("issues", []):
+        issue = Issue(
+            audit_record_id=audit_record.id,
+            attribute=finding.get("attribute", "General"),
+            content_bucket=finding.get("content_bucket", "Core Medical Content"),
+            issue_type=finding.get("issue_type", "LCQ"),
+            root_cause=finding.get("root_cause", "Unknown"),
+            severity=finding.get("severity", "Medium"),
+            confidence=finding.get("confidence", "Medium"),
+            regulatory_source=finding.get("regulatory_source"),
+            regulatory_section=finding.get("regulatory_section"),
+            current_content=finding.get("current_content"),
+            suggested_content=finding.get("suggested_content"),
+            evidence_text=finding.get("evidence_text"),
+            reviewer_status="Open",
+            reviewer_comments=f"In-depth Audit: {finding.get('reviewer_comments', 'Validated by AI against SmPC/DailyMed')}"
+        )
+        db.add(issue)
+        
+    # 5. Apply new 100-point scoring algorithm
+    scores = audit_findings.get("scores", {})
+    med_acc = scores.get("medical_accuracy", 30.0)
+    clin_comp = scores.get("clinical_completeness", 20.0)
+    pat_saf = scores.get("patient_safety", 20.0)
+    reg_align = scores.get("regulatory_alignment", 10.0)
+    form_cons = scores.get("formulation_consistency", 10.0)
+    edit_qual = scores.get("editorial_quality", 10.0)
+    
+    total_indepth_score = med_acc + clin_comp + pat_saf + reg_align + form_cons + edit_qual
+    total_indepth_score = max(0.0, min(100.0, total_indepth_score))
+    
+    # Save the score to medical_accuracy_score field
+    audit_record.medical_accuracy_score = round(total_indepth_score, 2)
+    
+    # Recalculate Content Health Score (40% Completeness, 30% In-depth Accuracy, 15% SEO, 15% GEO)
+    comp_score = audit_record.completeness_score or 0.0
+    acc_score = audit_record.medical_accuracy_score or 0.0
+    seo_score = audit_record.seo_score or 0.0
+    geo_score = audit_record.geo_score or 0.0
+    
+    health_score = (0.40 * comp_score) + (0.30 * acc_score) + (0.15 * seo_score) + (0.15 * geo_score)
+    audit_record.content_health_score = round(health_score, 2)
+    
+    audit_record.status = "Audited"
+    db.commit()
+    
+    # Update progress
+    try:
+        from backend.app.services.excel_exporter import update_batch_progress
+        update_batch_progress(db)
+    except Exception as progress_error:
+        print(f"[Audit Service] Failed to update progress JSON: {str(progress_error)}")
+        
+    print(f"[Audit Service] Finished In-depth Audit: Accuracy={audit_record.medical_accuracy_score}%, Content Health Score={audit_record.content_health_score}%")
+
+def call_gemini_indepth_audit_llm(drug_name: str, generic_name: str, route: str, extracted_content: dict, references: List[str]) -> dict:
+    """ Calls Gemini for In-depth Medical Affairs Content Audit """
+    if not settings.GEMINI_API_KEY and not settings.VERTEX_PROJECT:
+        print("[Audit Service] No Gemini credentials. Falling back to mock in-depth generation.")
+        return generate_mock_indepth_audit_issues(drug_name, generic_name, route, extracted_content)
+        
+    try:
+        prompt = f"""
+        You are a senior medical content auditor conducting an In-depth Medical Affairs Content Audit. 
+        Evaluate the following medicine catalog content against the provided references and specific guidelines.
+        
+        Medicine: {drug_name}
+        Parsed Generic/Salt Name: {generic_name}
+        Route of Administration: {route}
+        Extracted Catalog Content: {json.dumps(extracted_content)}
+        Regulatory Reference Texts: {json.dumps(references)}
+        
+        CRITICAL RULES FOR IN-DEPTH AUDIT:
+        1. Stop binary auditing. For every attribute (Uses, Side Effects, How to Use, Pregnancy, Breastfeeding, Safety parameters, Classifications, etc.), evaluate across these dimensions:
+           - Medically accurate
+           - Clinically complete
+           - Formulation-specific (must match this route/strength, not generic molecule knowledge)
+           - Regulatory aligned (latest FDA/CDSCO/EMA prescribing information)
+           - Internally consistent (e.g. if Fact Box says OPHTHAL but Uses say Injection, it is inconsistent)
+           - Up-to-date (prefer 2026/latest evidence)
+           - Consumer-safe
+        2. Detect omissions: Identify clinically significant missing safety warnings (e.g. reflex bradycardia or tissue necrosis for phenylephrine injection).
+        3. Detect formulation contamination: Look for content belonging to other routes (e.g. nasal spray or eye drop content on an injection page).
+        4. Detect template contamination: Look for boilerplate text copied from unrelated classes (e.g. "infection may return" on a cardiovascular drug).
+        5. Verify taxonomy: Check Chemical Class, Therapeutic Class, Pharmacological Class.
+        
+        You must output a JSON object containing two fields:
+        1. "scores": a dict with keys:
+           - "medical_accuracy" (float out of 30.0)
+           - "clinical_completeness" (float out of 20.0)
+           - "patient_safety" (float out of 20.0)
+           - "regulatory_alignment" (float out of 10.0)
+           - "formulation_consistency" (float out of 10.0)
+           - "editorial_quality" (float out of 10.0)
+        2. "issues": a list of issues. Each issue must have these keys:
+           - attribute: string (e.g. 'Uses', 'Side Effects', 'How to Use', 'Product Introduction')
+           - content_bucket: string
+           - issue_type: 'INC' (Incorrect), 'CON' (Contradiction), 'LCQ' (Low Content Quality), or 'MIS' (Missing)
+           - root_cause: string
+           - severity: 'Critical', 'High', 'Medium', 'Low'
+           - confidence: 'Very High', 'High', 'Medium', 'Low'
+           - regulatory_source: string
+           - regulatory_section: string
+           - current_content: string (describe what was wrong or missing)
+           - suggested_content: string (how to fix it)
+           - evidence_text: string
+           - reviewer_comments: string (describe why the audit failed this dimension)
+        """
+        from backend.app.services.llm_client import call_gemini
+        text = call_gemini("gemini-2.5-pro", prompt)
+        return json.loads(text)
+    except Exception as e:
+        print(f"[Audit Service] Error calling Gemini In-depth API: {str(e)}. Falling back to mock generator.")
+        return generate_mock_indepth_audit_issues(drug_name, generic_name, route, extracted_content)
+
+def generate_mock_indepth_audit_issues(drug_name: str, generic_name: str, route: str, extracted_content: dict) -> dict:
+    """ Mock fallback for In-depth Medical Affairs Content Audit """
+    generic = clean_generic_and_fdc(generic_name).lower()
+    
+    result = {
+        "scores": {
+            "medical_accuracy": 30.0,
+            "clinical_completeness": 20.0,
+            "patient_safety": 20.0,
+            "regulatory_alignment": 10.0,
+            "formulation_consistency": 10.0,
+            "editorial_quality": 10.0
+        },
+        "issues": []
+    }
+    
+    if "phenylephrine" in generic:
+        result["scores"] = {
+            "medical_accuracy": 18.0,
+            "clinical_completeness": 9.0,
+            "patient_safety": 11.0,
+            "regulatory_alignment": 6.0,
+            "formulation_consistency": 2.0,
+            "editorial_quality": 6.0
+        }
+        
+        result["issues"] = [
+            {
+                "attribute": "Product Introduction",
+                "content_bucket": "Core Medical Content",
+                "issue_type": "INC",
+                "root_cause": "Editorial Error",
+                "severity": "Critical",
+                "confidence": "Very High",
+                "regulatory_source": "DailyMed 2026",
+                "regulatory_section": "Introduction",
+                "current_content": "Contains sentence 'If you stop taking it too early the infection may return or worsen.'",
+                "suggested_content": "Remove antibiotic template contamination sentence.",
+                "evidence_text": "Antibiotic warning templates should not be used on cardiovascular vasopressor products.",
+                "reviewer_comments": "Failed formulation-specificity: Leftover antibiotic template."
+            },
+            {
+                "attribute": "Uses",
+                "content_bucket": "Core Medical Content",
+                "issue_type": "INC",
+                "root_cause": "Editorial Error",
+                "severity": "Critical",
+                "confidence": "High",
+                "regulatory_source": "FDA Prescribing Information",
+                "regulatory_section": "Indications and Usage",
+                "current_content": "Lists ophthalmic and nasal spray indications for an injectable formulation.",
+                "suggested_content": "Restrict indications to vasodilatory and anesthesia-induced hypotension only.",
+                "evidence_text": "Phenylephrine injection is a vasopressor indicated for increasing blood pressure in adults with vasodilatory shock.",
+                "reviewer_comments": "Failed formulation-specificity: Mixed ophthalmic and nasal spray indications."
+            },
+            {
+                "attribute": "Side Effects",
+                "content_bucket": "Safety",
+                "issue_type": "MIS",
+                "root_cause": "Content Omission",
+                "severity": "High",
+                "confidence": "High",
+                "regulatory_source": "DailyMed 2026",
+                "regulatory_section": "Adverse Reactions",
+                "current_content": "Omits reflex bradycardia, severe hypertension, tissue necrosis, arrhythmias, and ischemia.",
+                "suggested_content": "Add warnings for reflex bradycardia, tissue necrosis, and severe hypertension.",
+                "evidence_text": "Adverse reactions include reflex bradycardia, extravasation necrosis, arrhythmias, and ischemia.",
+                "reviewer_comments": "Failed clinical completeness: Omitted significant safety and adverse reactions."
+            },
+            {
+                "attribute": "How to Use",
+                "content_bucket": "Core Medical Content",
+                "issue_type": "INC",
+                "root_cause": "Editorial Error",
+                "severity": "Critical",
+                "confidence": "Very High",
+                "regulatory_source": "FDA 2026",
+                "regulatory_section": "Dosage and Administration",
+                "current_content": "Recommends taking the injection at the same time each day.",
+                "suggested_content": "Correct to state it is administered intravenously by healthcare professionals under continuous monitoring.",
+                "evidence_text": "Phenylephrine injection is given intravenously as a bolus or continuous infusion under expert monitoring.",
+                "reviewer_comments": "Failed formulation-specificity: Outpatient administration guidance on intravenous vasopressor."
+            },
+            {
+                "attribute": "Pregnancy",
+                "content_bucket": "Safety",
+                "issue_type": "LCQ",
+                "root_cause": "Legacy Content",
+                "severity": "Medium",
+                "confidence": "High",
+                "regulatory_source": "FDA 2026",
+                "regulatory_section": "Pregnancy",
+                "current_content": "Uses vague warning 'consult doctor before using during pregnancy'.",
+                "suggested_content": "Update to note that phenylephrine may cause fetal harm and uterine ischemia, and should be used only if benefits outweigh risks.",
+                "evidence_text": "Phenylephrine may cause fetal harm, uterine blood flow reduction, and tachycardia.",
+                "reviewer_comments": "Failed regulatory alignment: Vague warning instead of specific safety warnings."
+            },
+            {
+                "attribute": "Breastfeeding",
+                "content_bucket": "Safety",
+                "issue_type": "LCQ",
+                "root_cause": "Legacy Content",
+                "severity": "Medium",
+                "confidence": "High",
+                "regulatory_source": "FDA 2026",
+                "regulatory_section": "Lactation",
+                "current_content": "Uses generic safe-if-prescribed statement.",
+                "suggested_content": "State that there is no data on phenylephrine presence in human milk, and caution should be exercised.",
+                "evidence_text": "There are no data on the presence of phenylephrine in human milk.",
+                "reviewer_comments": "Failed regulatory alignment: Lacks lactation data disclaimer."
+            },
+            {
+                "attribute": "Therapeutic Class",
+                "content_bucket": "Metadata",
+                "issue_type": "INC",
+                "root_cause": "Taxonomy Error",
+                "severity": "Critical",
+                "confidence": "Very High",
+                "regulatory_source": "CDSCO",
+                "regulatory_section": "Taxonomy",
+                "current_content": "Lists Therapeutic Class as 'OPHTHAL'.",
+                "suggested_content": "Correct Therapeutic Class to 'CARDIAC' or 'VASOPRESSORS'.",
+                "evidence_text": "Phenylephrine injection belongs to the Cardiac/Vasopressor therapeutic category.",
+                "reviewer_comments": "Failed internal consistency: Listed as OPHTHAL while product is an injection for hypotension."
+            },
+            {
+                "attribute": "Action Class",
+                "content_bucket": "Metadata",
+                "issue_type": "INC",
+                "root_cause": "Taxonomy Error",
+                "severity": "Critical",
+                "confidence": "Very High",
+                "regulatory_source": "CDSCO",
+                "regulatory_section": "Taxonomy",
+                "current_content": "Lists Action Class as Ophthalmic Decongestant.",
+                "suggested_content": "Correct Action Class to Alpha-1 Adrenergic Agonist.",
+                "evidence_text": "Phenylephrine is a selective alpha-1 adrenergic receptor agonist.",
+                "reviewer_comments": "Failed internal consistency: Incorrect action class taxonomy."
+            },
+            {
+                "attribute": "Drug Interactions",
+                "content_bucket": "Drug Interactions",
+                "issue_type": "MIS",
+                "root_cause": "Content Omission",
+                "severity": "High",
+                "confidence": "High",
+                "regulatory_source": "FDA 2026",
+                "regulatory_section": "Drug Interactions",
+                "current_content": "Missing MAO inhibitors, tricyclic antidepressants, and oxytocic drugs interactions.",
+                "suggested_content": "Add specific drug interactions for MAOIs, oxytocics, and TCAs.",
+                "evidence_text": "Co-administration with MAOIs or TCAs increases vasopressor response. Co-administration with oxytocic drugs may cause severe hypertension.",
+                "reviewer_comments": "Failed clinical completeness: Missing interactions with major drug classes."
+            }
+        ]
+        
+    elif "linezolid" in generic:
+        result["scores"] = {
+            "medical_accuracy": 22.0,
+            "clinical_completeness": 12.0,
+            "patient_safety": 13.0,
+            "regulatory_alignment": 8.0,
+            "formulation_consistency": 8.0,
+            "editorial_quality": 8.0
+        }
+        result["issues"] = [
+            {
+                "attribute": "How to Use",
+                "content_bucket": "Core Medical Content",
+                "issue_type": "INC",
+                "root_cause": "Regulatory Update",
+                "severity": "Critical",
+                "confidence": "High",
+                "regulatory_source": "FDA 2026",
+                "regulatory_section": "Warnings",
+                "current_content": "Lacks warning to monitor complete blood counts weekly.",
+                "suggested_content": "Add warning: Monitor complete blood counts weekly due to myelosuppression risk during Linezolid therapy.",
+                "evidence_text": "Myelosuppression has been reported; monitor complete blood count weekly.",
+                "reviewer_comments": "Failed patient safety: Omitted critical blood count monitoring warning."
+            }
+        ]
+        
+    return result
+

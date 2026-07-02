@@ -159,8 +159,8 @@ def get_progress():
 
 @router.post("/run-process")
 def run_process(process_type: str, background_tasks: BackgroundTasks, db: Session = Depends(get_db)):
-    """ Triggers completeness, accuracy, consumability, or seo audits asynchronously """
-    if process_type not in ["completeness", "accuracy", "consumability", "seo"]:
+    """ Triggers completeness, accuracy, consumability, seo, or indepth audits asynchronously """
+    if process_type not in ["completeness", "accuracy", "consumability", "seo", "indepth"]:
         raise HTTPException(status_code=400, detail="Invalid process type")
         
     from backend.app.models.database import SessionLocal
@@ -218,9 +218,40 @@ def run_process(process_type: str, background_tasks: BackgroundTasks, db: Sessio
                 run_consumability_phase(db_session, medicines, logger)
             elif process_type == "seo":
                 run_seo_prompts_phase(db_session, medicines, logger)
+            elif process_type == "indepth":
+                count = 0
+                for med in medicines:
+                    logger.log(f"Running In-depth Accuracy Audit for SKU #{med.id} ({med.name or 'Unknown'})...")
+                    # Fetch audit record
+                    audit = db_session.query(AuditRecord).filter(
+                        AuditRecord.medicine_id == med.id
+                    ).order_by(AuditRecord.scraped_at.desc()).first()
+                    
+                    if not audit:
+                        audit = AuditRecord(medicine_id=med.id, status="Pending", json_path=f"archive/scraped_{med.id}.json")
+                        db_session.add(audit)
+                        db_session.commit()
+                        db_session.refresh(audit)
+                        
+                    from backend.app.services.audit import run_indepth_audit
+                    run_indepth_audit(db_session, audit)
+                    
+                    count += 1
+                    logger.set_stats(count)
+                    
+                # Close the audit session to commit everything and clear cache
+                db_session.close()
                 
-            from backend.app.services.excel_exporter import update_scraped_content_excel
-            update_scraped_content_excel(db_session)
+                # Open a fresh session for exporting Excel
+                export_db = SessionLocal()
+                try:
+                    from backend.app.services.excel_exporter import export_activity_excel
+                    export_activity_excel(export_db, "accuracy")
+                    from backend.app.services.excel_exporter import update_scraped_content_excel
+                    update_scraped_content_excel(export_db)
+                finally:
+                    export_db.close()
+                return
         except Exception as err:
             print(f"[Async Job] Error: {str(err)}")
         finally:
