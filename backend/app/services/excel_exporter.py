@@ -401,11 +401,12 @@ def export_activity_excel(db: Session, activity: str):
                 "substitutes": ["substitutes", "alternative brands", "alternatives"]
             }
             
-            attr_status = {a: "Pass" for a in all_attrs}
+            # Formatting Rule: "Accurate" if no issues, otherwise the exact issue description
+            attr_status = {a: "Accurate" for a in all_attrs}
             
             for issue in accuracy_issues:
                 issue_attr = (issue.attribute or "").strip().lower()
-                status_str = issue.suggested_content or issue.reviewer_comments or f"Fail ({get_friendly_issue_type(issue.issue_type)})"
+                status_str = issue.current_content or issue.suggested_content or f"Incorrect information in {issue.attribute}"
                 
                 # Find matching attribute
                 matched = False
@@ -415,13 +416,41 @@ def export_activity_excel(db: Session, activity: str):
                         matched = True
                         break
             
+            # Severity classification (one severity per SKU)
+            if critical_count > 0:
+                sku_severity = "🔴 Critical"
+            elif high_count > 0:
+                sku_severity = "🟠 Major"
+            elif med_count > 0 or low_count > 0:
+                sku_severity = "🟡 Moderate"
+            else:
+                sku_severity = "🔵 Minor"
+                
+            # Score out of 10
+            overall_score = round((audit.medical_accuracy_score or 0.0) / 10.0, 1)
+            
+            # Overall Comments: 2-4 bullet points summarizing major findings
+            comments_list = []
+            if not accuracy_issues:
+                comments_list.append("No medical quality issues or regulatory non-compliance detected.")
+                comments_list.append("Molecule information is accurate and aligned with SmPC guidelines.")
+            else:
+                if critical_count > 0:
+                    comments_list.append("Critical patient safety warnings or contraindications are omitted.")
+                if high_count > 0:
+                    comments_list.append("Major medical inaccuracies or off-label indications found.")
+                if med_count > 0 or low_count > 0:
+                    comments_list.append("Clinical incompleteness or minor editorial adjustments required.")
+                # Add specific suggestion summaries
+                for issue in accuracy_issues[:2]:
+                    comments_list.append(f"{issue.attribute}: {issue.suggested_content}")
+            
+            overall_comments = "\n".join([f"• {c}" for c in comments_list[:4]])
+            
             summary_rows.append({
+                "SKU Name": med.name or "Unknown",
+                "Drug Name": generic_name_display,
                 "SKU ID": med.id,
-                "URL": med.url,
-                "Product Name": med.name or "Unknown",
-                "Generic Name": generic_name_display,
-                "Medical Accuracy Score (%)": audit.medical_accuracy_score or 0.0,
-                "Status": audit.status or "Pending",
                 "Product Introduction Accuracy": attr_status["product_introduction"],
                 "Uses Accuracy": attr_status["uses"],
                 "Benefits Accuracy": attr_status["benefits"],
@@ -445,14 +474,9 @@ def export_activity_excel(db: Session, activity: str):
                 "Dosage Accuracy": attr_status["dosage"],
                 "Overdose Accuracy": attr_status["overdose"],
                 "Missed Dose Accuracy": attr_status["missed_dose"],
-                "Substitutes Accuracy": attr_status["substitutes"],
-                "Total Issues": len(accuracy_issues),
-                "Critical Issues": critical_count,
-                "High Issues": high_count,
-                "Medium Issues": med_count,
-                "Low Issues": low_count,
-                "Informational Issues": info_count,
-                "Audited At": audited_at_str
+                "Overall Comments": overall_comments,
+                "Overall Score (/10)": overall_score,
+                "Severity": sku_severity
             })
             
             for issue in accuracy_issues:
